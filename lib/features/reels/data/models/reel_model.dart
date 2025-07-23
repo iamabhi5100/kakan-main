@@ -10,6 +10,9 @@ class ReelModel {
   final String mediaFile;
   final String? thumbnail;
   final String privacy;
+  final int likesCount;
+  final int repostCount;
+  final bool flagLiked;
 
   ReelModel({
     required this.id,
@@ -21,6 +24,9 @@ class ReelModel {
     required this.mediaFile,
     this.thumbnail,
     required this.privacy,
+    required this.likesCount,
+    required this.repostCount,
+    required this.flagLiked,
   });
 
   factory ReelModel.fromJson(Map<String, dynamic> json) {
@@ -34,6 +40,9 @@ class ReelModel {
       mediaFile: json['media_file'] as String,
       thumbnail: json['thumbnail'] as String?,
       privacy: json['privacy'] as String,
+      likesCount: json['likes_count'] as int? ?? 0,
+      repostCount: json['repost_count'] as int? ?? 0,
+      flagLiked: json['flag_liked'] as bool? ?? false,
     );
   }
 
@@ -48,6 +57,9 @@ class ReelModel {
       mediaFile: mediaFile,
       thumbnail: thumbnail,
       privacy: privacy,
+      isLiked: flagLiked,
+      likesCount: likesCount,
+      repostCount: repostCount,
     );
   }
 }

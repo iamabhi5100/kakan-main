@@ -17,7 +17,7 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
   late PageController _pageController;
   late ReelsBloc _reelsBloc;
   int _currentIndex = 0;
-  final int _preloadRange = 0; // Changed to 0 to reduce buffer usage
+  final int _preloadRange = 0; // Only preload current reel to reduce memory usage
   final int _fetchThreshold = 3;
 
   @override
@@ -47,6 +47,7 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
       setState(() {
         _currentIndex = page;
       });
+      print('DEBUG: Page changed to index $_currentIndex');
       _checkForMoreReels();
     }
   }
@@ -101,7 +102,7 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Text(
-                          'No Reels Available',
+                          'No Trims Available',
                           style: TextStyle(color: Colors.white),
                         ),
                         ElevatedButton(
@@ -144,10 +145,13 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
                           child: CircularProgressIndicator(color: Colors.white),
                         );
                       }
+                      final isPlaying = index == _currentIndex;
+                      final isPreload = (index - _currentIndex).abs() <= _preloadRange;
+                      print('DEBUG: Rendering ReelItem for index $index, isPlaying: $isPlaying, isPreload: $isPreload');
                       return ReelItem(
                         reel: reels[index],
-                        isPlaying: index == _currentIndex,
-                        isPreload: (index - _currentIndex).abs() <= _preloadRange,
+                        isPlaying: isPlaying,
+                        isPreload: isPreload,
                       );
                     },
                   );
@@ -170,7 +174,7 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
                 }
                 return const Center(
                   child: Text(
-                    'Initializing Reels...',
+                    'Initializing Trims...',
                     style: TextStyle(color: Colors.white),
                   ),
                 );

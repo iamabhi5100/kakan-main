@@ -4,7 +4,7 @@ import 'package:kakan/config/theme.dart';
 import 'package:kakan/core/utils/media_manager.dart';
 import 'package:kakan/core/utils/session_manager.dart';
 import 'package:kakan/injection_container.dart' as di;
-import 'package:toastification/toastification.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class DrawerNavigationWidget extends StatelessWidget {
   final BuildContext parentContext; // Stable context from HomeScreen
@@ -56,15 +56,24 @@ class DrawerNavigationWidget extends StatelessWidget {
       await sessionManager.clearVerifyOtpResponse();
 
       Navigator.pop(parentContext); // Close loading dialog
-      GoRouter.of(parentContext).go('/login', extra: {'showLogoutSuccess': true}); // Navigate to login with success flag
+      Fluttertoast.showToast(
+        msg: 'Logged out successfully',
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.TOP,
+        backgroundColor: Colors.green,
+        textColor: Colors.white,
+        fontSize: 16.0,
+      );
+      GoRouter.of(parentContext).go('/login', extra: {'showLogoutSuccess': true});
     } catch (e) {
       Navigator.pop(parentContext); // Close loading dialog
-      toastification.show(
-        context: parentContext,
-        title: Text('Logout failed: $e'),
-        type: ToastificationType.error,
-        style: ToastificationStyle.fillColored,
-        autoCloseDuration: const Duration(seconds: 3),
+      Fluttertoast.showToast(
+        msg: 'Logout failed: $e',
+        toastLength: Toast.LENGTH_LONG,
+        gravity: ToastGravity.TOP,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+        fontSize: 16.0,
       );
     }
   }

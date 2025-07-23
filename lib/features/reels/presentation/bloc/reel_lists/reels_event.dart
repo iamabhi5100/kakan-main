@@ -67,3 +67,7 @@ class DeleteReelEvent extends ReelsEvent {
 }
 
 class PauseAllReelsEvent extends ReelsEvent {}
+
+class GetFeedEvent extends ReelsEvent {}
+
+class FetchMoreFeedsEvent extends ReelsEvent {}

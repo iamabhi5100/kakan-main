@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
@@ -5,12 +6,14 @@ import 'package:go_router/go_router.dart';
 import 'package:kakan/config/theme.dart';
 import 'package:kakan/core/utils/session_manager.dart';
 import 'package:kakan/features/chat/data/models/following_user_model.dart';
+import 'package:kakan/features/chat/data/models/chat_models.dart';
 import 'package:kakan/features/chat/presentation/bloc/chat_list_bloc/chat_bloc.dart';
 import 'package:kakan/features/chat/presentation/bloc/chat_list_bloc/chat_event.dart';
 import 'package:kakan/features/chat/presentation/bloc/chat_list_bloc/chat_state.dart';
 import 'package:kakan/features/chat/presentation/pages/chat_screen.dart';
 import 'package:kakan/features/chat/presentation/widgets/chat_item.dart';
 import 'package:kakan/injection_container.dart' as di;
+import 'dart:developer' as developer;
 
 class ChatListsScreen extends StatefulWidget {
   const ChatListsScreen({Key? key}) : super(key: key);
@@ -25,10 +28,37 @@ class _ChatListsScreenState extends State<ChatListsScreen> {
   List<FollowingUserModel> _followingUsers = [];
   List<String> _selectedUserIds = [];
   String _groupName = '';
+  final TextEditingController _searchController = TextEditingController();
+  List<ChatItemModel> _filteredChats = [];
+  List<ChatItemModel> _allChats = [];
+  bool _hasFetchedInbox = false; // Flag to prevent multiple fetches
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      final query = _searchController.text.trim().toLowerCase();
+      if (query.isEmpty) {
+        _filteredChats = _allChats;
+      } else {
+        _filteredChats = _allChats.where((chat) {
+          final name = chat.isGroup
+              ? (chat.groupName ?? '').toLowerCase()
+              : (chat.participantsDetails.receivers.first.name ?? '').toLowerCase();
+          return name.contains(query);
+        }).toList();
+      }
+    });
   }
 
   Future<void> _fetchInbox(BuildContext context) async {
@@ -92,9 +122,15 @@ class _ChatListsScreenState extends State<ChatListsScreen> {
       create: (_) => di.sl<ChatBloc>(),
       child: Builder(
         builder: (blocContext) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _fetchInbox(blocContext);
-          });
+          // Fetch inbox only once using blocContext
+          if (!_hasFetchedInbox) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _fetchInbox(blocContext);
+              setState(() {
+                _hasFetchedInbox = true;
+              });
+            });
+          }
 
           return Scaffold(
             backgroundColor: Colors.white,
@@ -120,10 +156,22 @@ class _ChatListsScreenState extends State<ChatListsScreen> {
                       borderRadius: BorderRadius.circular(24.0),
                     ),
                     child: TextField(
+                      controller: _searchController,
                       decoration: InputDecoration(
                         hintText: 'Search chats...',
                         hintStyle: appTheme.textTheme.bodyMedium,
                         prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, color: Colors.grey),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _filteredChats = _allChats;
+                                  });
+                                },
+                              )
+                            : null,
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                       ),
@@ -189,14 +237,23 @@ class _ChatListsScreenState extends State<ChatListsScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text(state.message)),
                         );
+                      } else if (state is ChatInboxLoaded) {
+                        setState(() {
+                          _allChats = state.chats;
+                          _filteredChats = _allChats;
+                          // Debug print to verify group names
+                          for (var chat in _allChats) {
+                            developer.log('Chat ID: ${chat.id}, Group Name: ${chat.groupName}');
+                          }
+                          _onSearchChanged();
+                        });
                       }
                     },
                     builder: (context, state) {
                       if (state is ChatLoading) {
                         return const Center(child: CircularProgressIndicator());
-                      } else if (state is ChatInboxLoaded) {
-                        final chats = state.chats;
-                        if (chats.isEmpty) {
+                      } else if (state is ChatInboxLoaded || _filteredChats.isNotEmpty) {
+                        if (_filteredChats.isEmpty && _allChats.isEmpty) {
                           return Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -213,9 +270,9 @@ class _ChatListsScreenState extends State<ChatListsScreen> {
                         }
                         return ListView.builder(
                           padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          itemCount: chats.length,
+                          itemCount: _filteredChats.length,
                           itemBuilder: (context, index) {
-                            final chat = chats[index];
+                            final chat = _filteredChats[index];
                             final receiver = chat.isGroup ? null : chat.participantsDetails.receivers.first;
                             final lastMessage = chat.lastMessage?.content ?? 'No messages yet';
 

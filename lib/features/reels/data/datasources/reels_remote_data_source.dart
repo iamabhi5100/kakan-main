@@ -6,6 +6,7 @@ import 'package:kakan/core/error/exceptions.dart';
 import 'package:kakan/core/network/api_service.dart';
 import 'package:kakan/features/reels/data/models/reel_model.dart';
 import 'package:kakan/features/reels/data/models/share_target_model.dart';
+import 'package:http_parser/http_parser.dart';
 
 abstract class ReelsRemoteDataSource {
   Future<Map<String, dynamic>> getReels({String? nextUrl});
@@ -184,26 +185,60 @@ class ReelsRemoteDataSourceImpl implements ReelsRemoteDataSource {
   @override
   Future<void> shareReel(String reelId, String chatId, String type) async {
     try {
+      // Fetch reel details to get the media_file URL
+      final reelResponse = await apiService.get(
+        '/v${ConstantApi.apiVersion}/feeds/trims/',
+        includeAuth: true,
+      );
+      print('DEBUG: Fetching reel details for reel $reelId: $reelResponse');
+
+      if (reelResponse is! Map<String, dynamic> || reelResponse['results'] == null) {
+        throw ServerException(message: 'Invalid reel data format');
+      }
+
+      final reels = (reelResponse['results'] as List<dynamic>)
+          .map((json) => ReelModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+      final reel = reels.firstWhere(
+        (r) => r.id == reelId,
+        orElse: () => throw ServerException(message: 'Reel not found: $reelId'),
+      );
+
+      // Download the video file from the media_file URL
+      final videoResponse = await Dio().get(
+        reel.mediaFile,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final videoBytes = videoResponse.data;
+
+      // Construct FormData with the video file as MultipartFile
       final formData = FormData.fromMap({
-        'reel_id': reelId,
         'content': type == 'group' ? 'Shared a reel to group' : 'Shared a reel',
-        'message_type': 'url',
+        'message_type': 'video',
+        'media_file': MultipartFile.fromBytes(
+          videoBytes,
+          filename: 'reel_${reelId}.mp4',
+          contentType: MediaType('video', 'mp4'),
+        ),
       });
 
+      // Determine the endpoint based on type
       final endpoint = type == 'group'
           ? '/v${ConstantApi.apiVersion}/chat/group/$chatId/send/'
           : '/v${ConstantApi.apiVersion}/chat/individual/$chatId/send/';
 
-      final response = await apiService.post(
+      // Send the share request
+      final shareResponse = await apiService.post(
         endpoint,
         formData,
         includeAuth: true,
       );
-      print('DEBUG: Share reel response for reel $reelId to chat $chatId (type: $type): $response');
+      print('DEBUG: Share reel response for reel $reelId to chat $chatId (type: $type): $shareResponse');
     } catch (e) {
       if (e is DioException && e.response?.statusCode == 404) {
         throw ServerException(message: 'Chat or reel not found: $reelId, $chatId');
       }
+      print('ERROR: Failed to share reel: $e');
       throw ServerException(message: 'Failed to share reel: $e');
     }
   }

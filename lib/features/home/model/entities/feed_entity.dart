@@ -1,4 +1,3 @@
-// lib/features/home/domain/entities/feed_entity.dart
 import 'package:kakan/features/home/data/models/feed_model.dart';
 
 class FeedEntity {
@@ -11,6 +10,9 @@ class FeedEntity {
   final String mediaFile;
   final String? thumbnail;
   final String privacy;
+  final int likesCount;
+  final int repostCount;
+  final bool flagLiked;
 
   FeedEntity({
     required this.id,
@@ -22,5 +24,8 @@ class FeedEntity {
     required this.mediaFile,
     this.thumbnail,
     required this.privacy,
+    required this.likesCount,
+    required this.repostCount,
+    required this.flagLiked,
   });
 }

@@ -1,5 +1,3 @@
-// lib/features/home/data/models/feed_model.dart
-
 import 'package:kakan/features/home/model/entities/feed_entity.dart';
 
 class FeedModel extends FeedEntity {
@@ -13,6 +11,9 @@ class FeedModel extends FeedEntity {
     required String mediaFile,
     String? thumbnail,
     required String privacy,
+    required int likesCount,
+    required int repostCount,
+    required bool flagLiked,
   }) : super(
           id: id,
           userProfileDetails: userProfileDetails,
@@ -23,6 +24,9 @@ class FeedModel extends FeedEntity {
           mediaFile: mediaFile,
           thumbnail: thumbnail,
           privacy: privacy,
+          likesCount: likesCount,
+          repostCount: repostCount,
+          flagLiked: flagLiked,
         );
 
   factory FeedModel.fromJson(Map<String, dynamic> json) {
@@ -36,6 +40,9 @@ class FeedModel extends FeedEntity {
       mediaFile: json['media_file']?.toString() ?? '',
       thumbnail: json['thumbnail']?.toString(),
       privacy: json['privacy']?.toString() ?? '',
+      likesCount: json['likes_count']?.toInt() ?? 0,
+      repostCount: json['repost_count']?.toInt() ?? 0,
+      flagLiked: json['flag_liked'] ?? false,
     );
   }
 
@@ -50,6 +57,9 @@ class FeedModel extends FeedEntity {
       'media_file': mediaFile,
       'thumbnail': thumbnail,
       'privacy': privacy,
+      'likes_count': likesCount,
+      'repost_count': repostCount,
+      'flag_liked': flagLiked,
     };
   }
 }

@@ -278,7 +278,7 @@ class _MainPostScreenState extends State<MainPostScreen> {
             ),
             const SizedBox(height: 16),
             // Audio Post button (uncomment if needed)
-            /*
+            
             SizedBox(
               width: 200,
               child: ElevatedButton(
@@ -299,7 +299,7 @@ class _MainPostScreenState extends State<MainPostScreen> {
                 ),
               ),
             ),
-            */
+            
           ],
         ),
       ),

@@ -1,4 +1,3 @@
-// lib/features/chat/data/models/chat_models.dart
 import 'package:kakan/core/network/models/user_details.dart';
 
 class CreateChatRequest {
@@ -142,7 +141,7 @@ class ChatItemModel {
     return ChatItemModel(
       id: json['id'],
       isGroup: json['is_group'],
-      groupName: json['group_name'],
+      groupName: json['name'], // Changed from json['group_name'] to json['name']
       created: json['created'],
       lastMessage: json['last_message'] != null ? MessageModel.fromJson(json['last_message']) : null,
       participantsDetails: ParticipantsDetails.fromJson(json['participants_details']),

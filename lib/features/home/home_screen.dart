@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/config/theme.dart';
+import 'package:kakan/core/network/api_service.dart';
 import 'package:kakan/core/utils/session_manager.dart';
 import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_bloc.dart';
 import 'package:kakan/features/home/presentation/widgets/feed_data_list.dart';
@@ -30,13 +32,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isAuthenticated = false;
   bool _showUpdateProfileCard = false;
   String? _username;
-  final SessionManager _sessionManager = di.sl<SessionManager>();
   Future<Map<String, dynamic>>? _authStatusFuture;
+  final ApiService _apiService = di.sl<ApiService>();
+  final SessionManager _sessionManager = di.sl<SessionManager>();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (kDebugMode) {
+      print('HomeScreen: initState called');
+    }
     _authStatusFuture = _checkAuthStatus();
   }
 
@@ -51,49 +57,109 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (kDebugMode) {
+      print('HomeScreen: dispose called');
+    }
     super.dispose();
   }
 
   Future<Map<String, dynamic>> _checkAuthStatus() async {
     if (kDebugMode) {
       print('HomeScreen: Checking auth status');
-      final verifyOtpResponse = await _sessionManager.getVerifyOtpResponse();
-      print('HomeScreen: VerifyOtpResponse: ${verifyOtpResponse?.toJson()}');
     }
-    final token = await _sessionManager.getAccessToken();
-    final verifyOtpResponse = await _sessionManager.getVerifyOtpResponse();
+    try {
+      final token = await _sessionManager.getAccessToken();
+      if (token == null) {
+        if (kDebugMode) {
+          print('HomeScreen: No token found');
+        }
+        return {
+          'isAuthenticated': false,
+          'showUpdateProfileCard': false,
+          'username': 'Guest',
+        };
+      }
 
-    final authData = {
-      'isAuthenticated': token != null,
-      'showUpdateProfileCard': verifyOtpResponse?.userDetails?.showUpdateProfileCard ?? false,
-      'username': verifyOtpResponse?.userDetails?.username ?? 'Guest',
-    };
+      final userId = await _sessionManager.getUserId();
+      if (userId == null) {
+        if (kDebugMode) {
+          print('HomeScreen: No userId found');
+        }
+        return {
+          'isAuthenticated': false,
+          'showUpdateProfileCard': false,
+          'username': 'Guest',
+        };
+      }
 
-    setState(() {
-      _isAuthenticated = authData['isAuthenticated'] as bool;
-      _showUpdateProfileCard = authData['showUpdateProfileCard'] as bool;
-      _username = authData['username'] as String;
-      _isLoading = false;
-    });
+      final response = await _apiService.get(
+        '/v${ConstantApi.apiVersion}/user/$userId/',
+        includeAuth: true,
+      );
 
-    return authData;
+      if (response is Map<String, dynamic>) {
+        final authData = {
+          'isAuthenticated': true,
+          'showUpdateProfileCard': response['show_update_profile_card'] ?? false,
+          'username': response['username'] ?? 'Guest',
+        };
+
+        setState(() {
+          _isAuthenticated = authData['isAuthenticated'] as bool;
+          _showUpdateProfileCard = authData['showUpdateProfileCard'] as bool;
+          _username = authData['username'] as String;
+          _isLoading = false;
+        });
+
+        if (kDebugMode) {
+          print('HomeScreen: Auth status updated: $_isAuthenticated, $_showUpdateProfileCard, $_username');
+        }
+        return authData;
+      } else {
+        throw Exception('Invalid response format');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('HomeScreen: Error fetching user data: $e');
+      }
+      setState(() {
+        _isAuthenticated = false;
+        _showUpdateProfileCard = false;
+        _username = 'Guest';
+        _isLoading = false;
+      });
+      return {
+        'isAuthenticated': false,
+        'showUpdateProfileCard': false,
+        'username': 'Guest',
+      };
+    }
   }
 
   void _onNavTap(int index) {
     setState(() {
       _currentIndex = index;
       if (_currentIndex == 0) {
-        _authStatusFuture = _checkAuthStatus(); // Refresh auth status only for home feed
+        _authStatusFuture = _checkAuthStatus();
+        if (kDebugMode) {
+          print('HomeScreen: Nav tapped, index: $index, refreshing auth status');
+        }
       }
     });
   }
 
   Widget _getSelectedScreen() {
+    if (kDebugMode) {
+      print('HomeScreen: Building selected screen for index: $_currentIndex');
+    }
     switch (_currentIndex) {
       case 0:
         return FutureBuilder<Map<String, dynamic>>(
           future: _authStatusFuture,
           builder: (context, snapshot) {
+            if (kDebugMode) {
+              print('HomeScreen: FutureBuilder state: ${snapshot.connectionState}');
+            }
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
@@ -119,6 +185,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               return const Center(child: CircularProgressIndicator());
             }
 
+            if (kDebugMode) {
+              print('HomeScreen: Rendering feed with showUpdateProfileCard: $_showUpdateProfileCard');
+            }
             return SingleChildScrollView(
               child: Column(
                 children: [
@@ -144,7 +213,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (kDebugMode) {
+      print('HomeScreen: build called');
+    }
     if (_isLoading) {
+      if (kDebugMode) {
+        print('HomeScreen: Showing loading indicator');
+      }
       return const Scaffold(
         backgroundColor: Colors.white,
         body: Center(child: CircularProgressIndicator()),
@@ -152,7 +227,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     return MultiBlocProvider(
-      providers: [ 
+      providers: [
         BlocProvider(create: (_) => di.sl<ProfilePostsBloc>()),
         BlocProvider(create: (_) => di.sl<FeedBloc>()),
         BlocProvider(create: (_) => di.sl<ProfiledetailsBloc>()),
@@ -164,7 +239,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               print('HomeScreen: Pop invoked, refreshing state');
             }
             setState(() {
-              _authStatusFuture = _checkAuthStatus(); // Trigger FutureBuilder rebuild
+              _authStatusFuture = _checkAuthStatus();
             });
           }
         },
@@ -192,8 +267,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         context.push('/youtube-dashboard');
                       },
                       child: Image.asset(
-                        'assets/images/youtubeicon.png',
-                        width: 80,
+                        'assets/images/youtubelogo.png',
+                        width: 40,
+                        height: 40,
                       ),
                     ),
                     const Gap(20),

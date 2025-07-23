@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kakan/config/theme.dart';
@@ -16,7 +17,6 @@ import 'package:kakan/features/profile/presentation/bloc/profile_post_list/profi
 import 'package:kakan/features/profile/presentation/bloc/profile_post_list/profile_posts_event.dart';
 import 'package:kakan/features/profile/presentation/bloc/profile_post_list/profile_posts_state.dart';
 import 'package:kakan/injection_container.dart' as di;
-import 'package:toastification/toastification.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -38,22 +38,25 @@ class _ProfileScreenState extends State<ProfileScreen>
     _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
-        // Fetch profile posts
-        context.read<ProfilePostsBloc>().add(GetProfilePostsEvent(mediaType: 'video'));
-        // Fetch profile details
+        context.read<ProfilePostsBloc>().add(
+          GetProfilePostsEvent(mediaType: 'video'),
+        );
         final userId = await _sessionManager.getUserId();
         if (userId != null) {
-          context.read<ProfiledetailsBloc>().add(GetProfiledetailsEvent(userId: userId));
+          context.read<ProfiledetailsBloc>().add(
+            GetProfiledetailsEvent(userId: userId),
+          );
         } else {
           if (kDebugMode) {
             print('ProfileScreen: User ID not found');
           }
-          toastification.show(
-            context: context,
-            title: const Text('User ID not found. Please log in again.'),
-            type: ToastificationType.error,
-            style: ToastificationStyle.fillColored,
-            autoCloseDuration: const Duration(seconds: 3),
+          Fluttertoast.showToast(
+            msg: 'User ID not found. Please log in again.',
+            toastLength: Toast.LENGTH_LONG,
+            gravity: ToastGravity.BOTTOM,
+            backgroundColor: Colors.red,
+            textColor: Colors.white,
+            fontSize: 16.0,
           );
         }
       }
@@ -72,20 +75,21 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Logout'),
+            content: const Text('Are you sure you want to logout?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Logout'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
     );
 
     if (confirm != true) return;
@@ -94,34 +98,41 @@ class _ProfileScreenState extends State<ProfileScreen>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const AlertDialog(
-          content: Row(
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 16),
-              Text('Logging out...'),
-            ],
-          ),
-        ),
+        builder:
+            (context) => const AlertDialog(
+              content: Row(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Text('Logging out...'),
+                ],
+              ),
+            ),
       );
 
-      // Pause media
       MediaManager().pauseMedia();
-
-      // Clear all stored data from SessionManager
       await _sessionManager.clearTokens();
       await _sessionManager.clearVerifyOtpResponse();
 
       Navigator.pop(context); // Close loading dialog
-      GoRouter.of(context).go('/login', extra: {'showLogoutSuccess': true}); // Navigate to login with success flag
+      Fluttertoast.showToast(
+        msg: 'Logged out successfully',
+        toastLength: Toast.LENGTH_SHORT,
+        gravity: ToastGravity.BOTTOM,
+        backgroundColor: Colors.green,
+        textColor: Colors.white,
+        fontSize: 16.0,
+      );
+      GoRouter.of(context).go('/login', extra: {'showLogoutSuccess': true});
     } catch (e) {
       Navigator.pop(context); // Close loading dialog
-      toastification.show(
-        context: context,
-        title: Text('Logout failed: $e'),
-        type: ToastificationType.error,
-        style: ToastificationStyle.fillColored,
-        autoCloseDuration: const Duration(seconds: 3),
+      Fluttertoast.showToast(
+        msg: 'Logout failed: $e',
+        toastLength: Toast.LENGTH_LONG,
+        gravity: ToastGravity.TOP,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+        fontSize: 16.0,
       );
     }
   }
@@ -139,7 +150,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       });
       final mediaType = isVideoActive ? 'video' : 'audio';
       if (mounted) {
-        context.read<ProfilePostsBloc>().add(GetProfilePostsEvent(mediaType: mediaType));
+        context.read<ProfilePostsBloc>().add(
+          GetProfilePostsEvent(mediaType: mediaType),
+        );
       }
     }
   }
@@ -174,11 +187,9 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
             actions: [
               IconButton(
-
                 icon: Icon(Icons.logout, color: Colors.black),
                 onPressed: _logout,
                 tooltip: 'Logout',
-                
               ),
             ],
             backgroundColor: Colors.white,
@@ -187,7 +198,6 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
           body: Column(
             children: [
-              // Profile Header
               BlocBuilder<ProfiledetailsBloc, ProfiledetailsState>(
                 builder: (context, state) {
                   String name = '';
@@ -201,8 +211,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   } else if (state is ProfiledetailsLoaded) {
                     name = state.profileDetails.name ?? 'User';
                     username = '@${state.profileDetails.username}';
-                    followersCount = state.profileDetails.followersCount.toString();
-                    followingCount = state.profileDetails.followingCount.toString();
+                    followersCount =
+                        state.profileDetails.followersCount.toString();
+                    followingCount =
+                        state.profileDetails.followingCount.toString();
                     profileImage = state.profileDetails.profileImage;
                   } else if (state is ProfiledetailsError) {
                     return Center(child: Text(state.message));
@@ -214,13 +226,42 @@ class _ProfileScreenState extends State<ProfileScreen>
                       crossAxisAlignment: CrossAxisAlignment.center,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundImage: profileImage != null
-                              ? NetworkImage(profileImage)
-                              : const NetworkImage(
-                                  'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQyRhSPTCYGo76ZTjyt2mRqnTPtmz5rWAavFmqn9Wkm54-5detlTZkO_8o&usqp=CAE&s',
-                                ),
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(
+                              12,
+                            ), // Slightly rounded corners
+                            image: DecorationImage(
+                              image:
+                                  profileImage != null &&
+                                          profileImage.isNotEmpty
+                                      ? NetworkImage(profileImage)
+                                      : const AssetImage(
+                                            'assets/images/avataruser.png',
+                                          )
+                                          as ImageProvider,
+                              fit: BoxFit.cover,
+                            ),
+
+                            color: Colors.grey, // Fallback color if image fails
+                          ),
+                          child:
+                              profileImage == null || profileImage.isEmpty
+                                  ? Center(
+                                    child: Text(
+                                      username.isNotEmpty
+                                          ? username[0].toUpperCase()
+                                          : 'U',
+                                      style: const TextStyle(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                  : null,
                         ),
                         const Gap(20),
                         Text(
@@ -252,7 +293,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   );
                 },
               ),
-              // Tabs
               TabBar(
                 controller: _tabController,
                 tabs: const [
@@ -265,8 +305,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                         Text(
                           'Video',
                           style: TextStyle(
-                              fontFamily: 'Product Sans',
-                              fontWeight: FontWeight.w600),
+                            fontFamily: 'Product Sans',
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
@@ -280,8 +321,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                         Text(
                           'Song',
                           style: TextStyle(
-                              fontFamily: 'Product Sans',
-                              fontWeight: FontWeight.w600),
+                            fontFamily: 'Product Sans',
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
@@ -292,20 +334,52 @@ class _ProfileScreenState extends State<ProfileScreen>
                 indicatorColor: Colors.blue,
                 onTap: (index) => _handleTabChange(index == 0),
               ),
-              // Tab Content
               Expanded(
-                child: BlocBuilder<ProfilePostsBloc, ProfilePostsState>(
-                  builder: (context, state) {
-                    if (state is ProfilePostsLoading) {
-                      return const Center(child: CircularProgressIndicator());
-                    } else if (state is ProfilePostsLoaded) {
-                      return _isVideoTabActive
-                          ? _buildPostListVideo(state.posts)
-                          : _buildPostListAudio(state.posts);
-                    } else if (state is ProfilePostsError) {
-                      return Center(child: Text(state.message));
+                child: BlocBuilder<ProfiledetailsBloc, ProfiledetailsState>(
+                  builder: (context, profileState) {
+                    String name = 'Unknown User';
+                    String username = 'unknown';
+                    String? profileImage;
+
+                    if (profileState is ProfiledetailsLoaded) {
+                      name =
+                          profileState.profileDetails.name?.isNotEmpty == true
+                              ? profileState.profileDetails.name!
+                              : 'Unknown User';
+                      username =
+                          profileState.profileDetails.username?.isNotEmpty ==
+                                  true
+                              ? profileState.profileDetails.username
+                              : 'unknown';
+                      profileImage = profileState.profileDetails.profileImage;
                     }
-                    return const Center(child: Text('No posts available'));
+
+                    return BlocBuilder<ProfilePostsBloc, ProfilePostsState>(
+                      builder: (context, state) {
+                        if (state is ProfilePostsLoading) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        } else if (state is ProfilePostsLoaded) {
+                          return _isVideoTabActive
+                              ? _buildPostListVideo(
+                                state.posts,
+                                name,
+                                username,
+                                profileImage,
+                              )
+                              : _buildPostListAudio(
+                                state.posts,
+                                name,
+                                username,
+                                profileImage,
+                              );
+                        } else if (state is ProfilePostsError) {
+                          return Center(child: Text(state.message));
+                        }
+                        return const Center(child: Text('No posts available'));
+                      },
+                    );
                   },
                 ),
               ),
@@ -339,27 +413,47 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildPostListVideo(List<ProfilePostEntity> posts) {
+  Widget _buildPostListVideo(
+    List<ProfilePostEntity> posts,
+    String name,
+    String username,
+    String? profileImage,
+  ) {
     return ListView.builder(
       itemCount: posts.length,
       itemBuilder: (context, index) {
         final post = posts[index];
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-          child: VideoFeedWidget(post: post),
+          child: VideoFeedWidget(
+            post: post,
+            name: name,
+            username: username,
+            profileImage: profileImage,
+          ),
         );
       },
     );
   }
 
-  Widget _buildPostListAudio(List<ProfilePostEntity> posts) {
+  Widget _buildPostListAudio(
+    List<ProfilePostEntity> posts,
+    String name,
+    String username,
+    String? profileImage,
+  ) {
     return ListView.builder(
       itemCount: posts.length,
       itemBuilder: (context, index) {
         final post = posts[index];
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-          child: AudioFeedWidget(post: post),
+          child: AudioFeedWidget(
+            post: post,
+            name: name,
+            username: username,
+            profileImage: profileImage,
+          ),
         );
       },
     );

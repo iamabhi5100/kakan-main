@@ -55,7 +55,7 @@ class _BottomNavigationWidgetState extends State<BottomNavigationWidget> {
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.video_library),
-            label: 'Reels',
+            label: 'Trims',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),

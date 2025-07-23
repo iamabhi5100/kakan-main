@@ -1,4 +1,3 @@
-// lib/features/home/data/repositories/feed_repository_impl.dart
 import 'package:dartz/dartz.dart';
 import 'package:kakan/core/error/exceptions.dart';
 import 'package:kakan/core/error/failures.dart';
@@ -22,7 +21,57 @@ class FeedRepositoryImpl implements FeedRepository {
     if (await networkInfo.isConnected) {
       try {
         final feeds = await remoteDataSource.getFeeds();
-        return Right(feeds.cast<FeedEntity>());
+        return Right(feeds);
+      } on ServerException catch (e) {
+        return Left(ServerFailure(exception: e));
+      }
+    } else {
+      return Left(ServerFailure(exception: ServerException(message: 'No internet connection')));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> likeDislikePost(String postId) async {
+    if (await networkInfo.isConnected) {
+      try {
+        await remoteDataSource.likeDislikePost(postId);
+        return const Right(null);
+      } on ServerException catch (e) {
+        return Left(ServerFailure(exception: e));
+      }
+    } else {
+      return Left(ServerFailure(exception: ServerException(message: 'No internet connection')));
+    }
+  }
+
+  @override
+  Future<Either<Failure, String>> repost({
+    required String postId,
+    required String title,
+    required String caption,
+  }) async {
+    if (await networkInfo.isConnected) {
+      try {
+        final newPostId = await remoteDataSource.repost(
+          postId: postId,
+          title: title,
+          caption: caption,
+        );
+        return Right(newPostId);
+      } on ServerException catch (e) {
+        return Left(ServerFailure(exception: e));
+      }
+    } else {
+      return Left(ServerFailure(exception: ServerException(message: 'No internet connection')));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> deleteFeed(String feedId) async {
+    if (await networkInfo.isConnected) {
+      try {
+        await remoteDataSource.deleteFeed(feedId);
+        return const Right(null);
       } on ServerException catch (e) {
         return Left(ServerFailure(exception: e));
       }

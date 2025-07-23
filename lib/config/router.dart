@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -20,7 +21,9 @@ import 'package:kakan/features/postmyfeed/presentation/main_post_screen.dart';
 import 'package:kakan/features/postmyfeed/presentation/video_post_screen.dart';
 import 'package:kakan/features/profile/presentation/bloc/profile_detail/profiledetails_bloc.dart';
 import 'package:kakan/features/profile/presentation/bloc/profile_post_list/profile_posts_bloc.dart';
+import 'package:kakan/features/profile/presentation/pages/update_profile_screen.dart';
 import 'package:kakan/features/profile/presentation/profile_screen.dart';
+// import 'package:kakan/features/profile/presentation/update_profile_screen.dart';
 import 'package:kakan/features/reels/presentation/pages/reels_page.dart';
 import 'package:kakan/features/search/presentation/search_screen.dart';
 import 'package:kakan/features/splash/splash_screen.dart';
@@ -30,6 +33,7 @@ import 'package:kakan/features/youtube/presentation/bloc/youtube_event.dart';
 import 'package:kakan/features/youtube/presentation/pages/audio_editor_page.dart';
 import 'package:kakan/features/youtube/presentation/pages/video_detail_screen.dart';
 import 'package:kakan/features/youtube/presentation/pages/video_editor_screen.dart';
+import 'package:kakan/features/youtube/presentation/pages/youtube_player_screen.dart';
 import 'package:kakan/features/youtube/presentation/youtube_dashboard_screen.dart';
 import 'package:kakan/injection_container.dart' as di;
 
@@ -55,6 +59,9 @@ final GoRouter router = GoRouter(
       redirect: (context, state) async {
         final sessionManager = di.sl<SessionManager>();
         final token = await sessionManager.getAccessToken();
+        if (kDebugMode) {
+          print('Splash route redirect: token=$token, redirecting to ${token == null ? '/login' : '/home'}');
+        }
         if (token != null) {
           return '/home';
         }
@@ -100,13 +107,16 @@ final GoRouter router = GoRouter(
       redirect: (context, state) async {
         final sessionManager = di.sl<SessionManager>();
         final token = await sessionManager.getAccessToken();
+        if (kDebugMode) {
+          print('Home route redirect: token=$token, redirecting to ${token == null ? '/login' : 'null'}');
+        }
         if (token == null) {
           return '/login';
         }
         return null;
       },
     ),
-    GoRoute(
+   GoRoute(
       path: '/youtube-dashboard',
       builder: (context, state) => BlocProvider(
         create: (_) => di.sl<YoutubeBloc>()..add(FetchHomeVideosEvent()),
@@ -115,6 +125,9 @@ final GoRouter router = GoRouter(
       redirect: (context, state) async {
         final sessionManager = di.sl<SessionManager>();
         final token = await sessionManager.getAccessToken();
+        if (kDebugMode) {
+          print('Youtube-dashboard route redirect: token=$token, redirecting to ${token == null ? '/login' : 'null'}');
+        }
         if (token == null) {
           return '/login';
         }
@@ -122,6 +135,13 @@ final GoRouter router = GoRouter(
       },
     ),
     GoRoute(
+      path: '/youtube-player',
+      builder: (context, state) {
+        final video = state.extra as VideoEntity;
+        return YoutubePlayerScreen(video: video);
+      },
+    ),
+  GoRoute(
       path: '/video-detail',
       builder: (context, state) {
         final video = state.extra as VideoEntity;
@@ -170,11 +190,18 @@ final GoRouter router = GoRouter(
       ),
     ),
     GoRoute(
+      path: '/update-profile',
+      builder: (context, state) => const UpdateProfileScreen(),
+    ),
+    GoRoute(
       path: '/my-files',
       builder: (context, state) => const MyfilesScreen(),
       redirect: (context, state) async {
         final sessionManager = di.sl<SessionManager>();
         final token = await sessionManager.getAccessToken();
+        if (kDebugMode) {
+          print('My-files route redirect: token=$token, redirecting to ${token == null ? '/login' : 'null'}');
+        }
         if (token == null) {
           return '/login';
         }
@@ -187,6 +214,9 @@ final GoRouter router = GoRouter(
       redirect: (context, state) async {
         final sessionManager = di.sl<SessionManager>();
         final token = await sessionManager.getAccessToken();
+        if (kDebugMode) {
+          print('Chat route redirect: token=$token, redirecting to ${token == null ? '/login' : 'null'}');
+        }
         if (token == null) {
           return '/login';
         }
@@ -200,6 +230,9 @@ final GoRouter router = GoRouter(
       redirect: (context, state) async {
         final sessionManager = di.sl<SessionManager>();
         final token = await sessionManager.getAccessToken();
+        if (kDebugMode) {
+          print('Reels route redirect: token=$token, redirecting to ${token == null ? '/login' : 'null'}');
+        }
         if (token == null) {
           return '/login';
         }
@@ -240,6 +273,9 @@ final GoRouter router = GoRouter(
       redirect: (context, state) async {
         final sessionManager = di.sl<SessionManager>();
         final token = await sessionManager.getAccessToken();
+        if (kDebugMode) {
+          print('Main-post route redirect: token=$token, redirecting to ${token == null ? '/login' : 'null'}');
+        }
         if (token == null) {
           return '/login';
         }
@@ -255,6 +291,9 @@ final GoRouter router = GoRouter(
       redirect: (context, state) async {
         final sessionManager = di.sl<SessionManager>();
         final token = await sessionManager.getAccessToken();
+        if (kDebugMode) {
+          print('Video-post route redirect: token=$token, redirecting to ${token == null ? '/login' : 'null'}');
+        }
         if (token == null) {
           return '/login';
         }
@@ -270,6 +309,9 @@ final GoRouter router = GoRouter(
       redirect: (context, state) async {
         final sessionManager = di.sl<SessionManager>();
         final token = await sessionManager.getAccessToken();
+        if (kDebugMode) {
+          print('Audio-post route redirect: token=$token, redirecting to ${token == null ? '/login' : 'null'}');
+        }
         if (token == null) {
           return '/login';
         }

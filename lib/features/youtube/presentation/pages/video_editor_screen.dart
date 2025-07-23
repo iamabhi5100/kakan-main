@@ -13,7 +13,6 @@ import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
-import 'package:flutter/services.dart' show BackgroundIsolateBinaryMessenger, RootIsolateToken;
 
 class VideoEditorScreen extends StatefulWidget {
   final String videoPath;
@@ -40,21 +39,11 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   final _isUploading = ValueNotifier<bool>(false);
   final YoutubeApiService _apiService = di.sl<YoutubeApiService>();
   int cropGridViewerKey = 0; // For web refresh issue
-  RootIsolateToken? _rootIsolateToken; // Store token for isolate
 
   @override
   void initState() {
     super.initState();
     print('VideoEditorScreen: Initializing for ${widget.videoPath}');
-    // Store RootIsolateToken for use in compute
-    if (Platform.isAndroid) {
-      _rootIsolateToken = RootIsolateToken.instance;
-      if (_rootIsolateToken != null) {
-        BackgroundIsolateBinaryMessenger.ensureInitialized(_rootIsolateToken!);
-      } else {
-        print('VideoEditorScreen: Warning - RootIsolateToken is null, FFmpeg may run on main thread');
-      }
-    }
     _controller = VideoEditorController.file(
       XFile(widget.videoPath),
       minDuration: const Duration(seconds: 1),
@@ -79,42 +68,22 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   }
 
   Future<String> _runFFmpegCommand(String command) async {
-    // Try running in a compute isolate
-    if (_rootIsolateToken != null) {
-      try {
-        return await compute(_executeFFmpeg, {'command': command, 'token': _rootIsolateToken});
-      } catch (e) {
-        print('VideoEditorScreen: Compute isolate failed - $e');
+    print('VideoEditorScreen: Executing FFmpeg command: $command');
+    try {
+      final sess = await FFmpegKit.execute(command);
+      final rc = await sess.getReturnCode();
+      if (!ReturnCode.isSuccess(rc)) {
+        final logs = await sess.getAllLogs();
+        final errorMessage = logs.map((log) => log.getMessage()).join('\n');
+        print('VideoEditorScreen: FFmpeg failed: $errorMessage');
+        throw ServerException(message: 'FFmpeg failed: $errorMessage');
       }
+      print('VideoEditorScreen: FFmpeg command executed successfully');
+      return command;
+    } catch (e) {
+      print('VideoEditorScreen: FFmpeg command failed: $e');
+      throw ServerException(message: 'FFmpeg execution failed: $e');
     }
-
-    // Fallback to synchronous execution on main thread
-    print('VideoEditorScreen: Warning - Running FFmpeg on main thread due to null RootIsolateToken');
-    final sess = await FFmpegKit.execute(command);
-    final rc = await sess.getReturnCode();
-    if (!ReturnCode.isSuccess(rc)) {
-      final logs = await sess.getAllLogs();
-      throw ServerException(message: 'FFmpeg failed: ${logs.map((log) => log.getMessage()).join('\n')}');
-    }
-    return command;
-  }
-
-  // Static method for compute isolate
-  static Future<String> _executeFFmpeg(Map<String, dynamic> params) async {
-    final command = params['command'] as String;
-    final token = params['token'] as RootIsolateToken?;
-    if (Platform.isAndroid && token != null) {
-      BackgroundIsolateBinaryMessenger.ensureInitialized(token);
-    } else if (Platform.isAndroid) {
-      throw ServerException(message: 'Cannot initialize FFmpeg: RootIsolateToken is null');
-    }
-    final sess = await FFmpegKit.execute(command);
-    final rc = await sess.getReturnCode();
-    if (!ReturnCode.isSuccess(rc)) {
-      final logs = await sess.getAllLogs();
-      throw ServerException(message: 'FFmpeg failed: ${logs.map((log) => log.getMessage()).join('\n')}');
-    }
-    return command;
   }
 
   @override
@@ -143,6 +112,11 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   Future<void> _exportVideo() async {
     if (!_controller.initialized || _isExporting.value || _isUploading.value) {
       print('VideoEditorScreen: Export aborted - Video not loaded or export/upload in progress');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Video is not loaded or export/upload in progress')),
+        );
+      }
       return;
     }
 
@@ -163,15 +137,23 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
       await _runFFmpegCommand(execute);
       print('VideoEditorScreen: Video exported successfully to $outputPath');
       await _uploadVideo(outputPath);
-      if (mounted) _isExporting.value = false;
     } catch (e, stackTrace) {
       print('VideoEditorScreen: Error exporting video - $e, stackTrace: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error exporting video: $e')),
+        );
+      }
+    } finally {
       if (mounted) _isExporting.value = false;
     }
   }
 
   Future<void> _uploadVideo(String filePath) async {
-    if (_isUploading.value) return;
+    if (_isUploading.value) {
+      print('VideoEditorScreen: Upload aborted - Already uploading');
+      return;
+    }
     _isUploading.value = true;
     try {
       final file = File(filePath);
@@ -198,6 +180,22 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
       }
     } catch (e) {
       print('VideoEditorScreen: Failed to upload video - $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString().contains('Request Entity Too Large')
+                  ? 'Video file is too large. Try a smaller video or contact support.'
+                  : 'Failed to upload video: $e',
+            ),
+            backgroundColor: Colors.redAccent,
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () => _uploadVideo(filePath),
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) _isUploading.value = false;
     }
@@ -227,7 +225,6 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Cover exported: $outputPath')),
         );
-        _isExporting.value = false;
       }
     } catch (e, stackTrace) {
       print('VideoEditorScreen: Error exporting cover - $e, stackTrace: $stackTrace');
@@ -235,8 +232,9 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error exporting cover: $e')),
         );
-        _isExporting.value = false;
       }
+    } finally {
+      if (mounted) _isExporting.value = false;
     }
   }
 
@@ -289,10 +287,10 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
                 tooltip: 'Open export menu',
                 icon: const Icon(Icons.save),
                 itemBuilder: (context) => [
-                  PopupMenuItem(
-                    onTap: _exportCover,
-                    child: const Text('Export cover'),
-                  ),
+                  // PopupMenuItem(
+                  //   onTap: _exportCover,
+                  //   child: const Text('Export cover'),
+                  // ),
                   PopupMenuItem(
                     onTap: _exportVideo,
                     child: const Text('Export and upload video'),

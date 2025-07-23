@@ -13,6 +13,13 @@ class SearchbarYoutubeWidget extends StatefulWidget {
 class _SearchbarYoutubeWidgetState extends State<SearchbarYoutubeWidget> {
   final TextEditingController _controller = TextEditingController();
 
+  void _submitSearch(String value) {
+    final query = value.trim();
+    if (query.isEmpty) return;
+    widget.onSearch(query);
+    print('SearchbarYoutubeWidget: Search triggered for query: $query');
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -48,6 +55,10 @@ class _SearchbarYoutubeWidgetState extends State<SearchbarYoutubeWidget> {
       child: SearchBar(
         controller: _controller,
         hintText: 'Search for videos',
+        // show “Search” on the keyboard
+        textInputAction: TextInputAction.search,
+        // handle keyboard “Search”/Enter
+        onSubmitted: _submitSearch,
         backgroundColor: MaterialStateProperty.all(cardColor),
         elevation: MaterialStateProperty.all(0),
         shape: MaterialStateProperty.all(

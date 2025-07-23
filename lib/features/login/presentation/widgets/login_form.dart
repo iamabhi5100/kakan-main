@@ -6,8 +6,6 @@ import 'package:kakan/features/login/data/datasources/remote_data_source.dart';
 import 'package:kakan/features/login/presentation/bloc/otp_bloc.dart';
 import 'package:kakan/features/login/presentation/bloc/otp_event.dart';
 import 'package:kakan/features/login/presentation/bloc/otp_state.dart';
-import 'package:kakan/features/login/presentation/pages/otp_page.dart';
-import 'package:toastification/toastification.dart';
 import 'package:kakan/injection_container.dart' as di;
 
 class LoginForm extends StatefulWidget {
@@ -47,7 +45,6 @@ class _LoginFormState extends State<LoginForm> {
     });
   }
 
-  /// Submits the phone number to request an OTP, with a 30-second cooldown.
   void _onSubmit() {
     if (_isOtpRequestDisabled) return;
 
@@ -92,7 +89,6 @@ class _LoginFormState extends State<LoginForm> {
       _cooldownSeconds = 30;
     });
 
-    // Update cooldown every second
     _cooldownTimer?.cancel();
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_cooldownSeconds <= 0) {
@@ -123,7 +119,6 @@ class _LoginFormState extends State<LoginForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Title
               Text(
                 '🎶 \nHi, There \nLet’s get you inside the groove!',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -133,7 +128,6 @@ class _LoginFormState extends State<LoginForm> {
                     ),
               ),
               const SizedBox(height: 16),
-              // Subtitle
               Text(
                 'Enter your phone number and we’ll send you a magic code for login.',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -142,7 +136,6 @@ class _LoginFormState extends State<LoginForm> {
                     ),
               ),
               const SizedBox(height: 40),
-              // Phone Number Label
               Text(
                 'Mobile No.*',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -152,7 +145,6 @@ class _LoginFormState extends State<LoginForm> {
                     ),
               ),
               const SizedBox(height: 8),
-              // Phone Number Input
               TextFormField(
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
@@ -181,7 +173,6 @@ class _LoginFormState extends State<LoginForm> {
                   errorStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red),
                 ),
               ),
-              // Phone Error
               if (_phoneError != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8, left: 4),
@@ -204,7 +195,6 @@ class _LoginFormState extends State<LoginForm> {
                   ),
                 ),
               const Spacer(),
-              // Checkbox and Terms
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -236,7 +226,6 @@ class _LoginFormState extends State<LoginForm> {
                   ),
                 ],
               ),
-              // Checkbox Error
               if (_checkboxError != null)
                 Padding(
                   padding: const EdgeInsets.only(left: 12, bottom: 8),
@@ -259,7 +248,6 @@ class _LoginFormState extends State<LoginForm> {
                   ),
                 ),
               const SizedBox(height: 16),
-              // Submit Button
               SizedBox(
                 width: double.infinity,
                 height: 50,

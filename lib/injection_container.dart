@@ -16,7 +16,7 @@ import 'package:kakan/features/chat/domain/usecases/get_following_users.dart';
 import 'package:kakan/features/chat/domain/usecases/get_inbox.dart';
 import 'package:kakan/features/chat/domain/usecases/get_message_history.dart';
 import 'package:kakan/features/chat/domain/usecases/send_group_message.dart';
-import 'package:kakan/features/chat/domain/usecases/send_message.dart';
+import 'package:kakan/features/chat/domain/usecases/send_message.dart' as chat;
 import 'package:kakan/features/chat/presentation/bloc/chat_list_bloc/chat_bloc.dart';
 import 'package:kakan/features/followsuggestions/data/datasources/suggestion_remote_data_source.dart' as follow_suggestions;
 import 'package:kakan/features/followsuggestions/data/repositories/suggestion_repository_impl.dart';
@@ -26,9 +26,13 @@ import 'package:kakan/features/followsuggestions/domain/usecases/get_follow_sugg
 import 'package:kakan/features/followsuggestions/domain/usecases/unfollow_user.dart';
 import 'package:kakan/features/followsuggestions/presentation/bloc/suggestion_bloc.dart';
 import 'package:kakan/features/home/data/datasources/feed_remote_data_source.dart';
+import 'package:kakan/features/home/data/datasources/share_remote_data_source.dart';
 import 'package:kakan/features/home/data/repositories/feed_repository_impl.dart';
 import 'package:kakan/features/home/model/repositories/feed_repository.dart';
+import 'package:kakan/features/home/model/repositories/share_repository.dart';
 import 'package:kakan/features/home/model/usecases/get_feeds.dart';
+import 'package:kakan/features/home/model/usecases/get_users_to_share.dart';
+import 'package:kakan/features/home/model/usecases/send_share_message.dart';
 import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_bloc.dart';
 import 'package:kakan/features/login/data/datasources/remote_data_source.dart' as login;
 import 'package:kakan/features/login/data/repositories/auth_repository_impl.dart';
@@ -101,13 +105,13 @@ import 'package:kakan/features/search/domain/usecases/search_videos.dart';
 import 'package:kakan/features/search/presentation/bloc/combined_search/combined_search_bloc.dart';
 import 'package:kakan/features/search/presentation/bloc/search_bloc.dart';
 import 'package:kakan/features/youtube/data/api_service.dart';
-// import 'package:kakan/features/youtube/data/youtube_repository_impl.dart';
 import 'package:kakan/features/youtube/data/youtube_service.dart';
 import 'package:kakan/features/youtube/domain/repositories/youtube_repository.dart';
 import 'package:kakan/features/youtube/data/youtube_repository_impl.dart';
 import 'package:kakan/features/youtube/domain/usecases/download_video.dart';
 import 'package:kakan/features/youtube/domain/usecases/search_videos.dart' as youtube;
 import 'package:kakan/features/youtube/presentation/bloc/youtube_bloc.dart';
+
 
 final sl = GetIt.instance;
 
@@ -121,6 +125,15 @@ void init() {
   sl.registerLazySingleton(() => DefaultCacheManager());
   sl.registerLazySingleton<NetworkInfo>(() => NetworkInfoImpl(sl()));
   sl.registerLazySingleton(() => ApiService(sessionManager: sl()));
+
+  // Share Feature
+  sl.registerLazySingleton<ShareRemoteDataSource>(() => ShareRemoteDataSourceImpl(
+        apiService: sl(),
+        cacheManager: sl(),
+      ));
+  sl.registerLazySingleton<ShareRepository>(() => ShareRepositoryImpl(remoteDataSource: sl()));
+  sl.registerLazySingleton(() => GetUsersToShare(sl()));
+  sl.registerLazySingleton(() => SendShareMessage(sl()));
 
   // Login Feature
   sl.registerFactory(() => OtpBloc(
@@ -211,7 +224,7 @@ void init() {
         getFollowingUsers: sl(),
         createChat: sl(),
         createGroupChat: sl(),
-        sendMessage: sl(),
+        sendMessage: sl<chat.SendMessage>(),
         sendGroupMessage: sl(),
         getInbox: sl(),
         getMessageHistory: sl(),
@@ -221,7 +234,7 @@ void init() {
   sl.registerLazySingleton(() => GetFollowingUsers(sl()));
   sl.registerLazySingleton(() => CreateChat(sl()));
   sl.registerLazySingleton(() => CreateGroupChat(sl()));
-  sl.registerLazySingleton(() => SendMessage(sl()));
+  sl.registerLazySingleton(() => chat.SendMessage(sl()));
   sl.registerLazySingleton(() => SendGroupMessage(sl()));
   sl.registerLazySingleton(() => GetInbox(sl()));
   sl.registerLazySingleton(() => GetMessageHistory(sl()));
@@ -261,13 +274,19 @@ void init() {
   sl.registerLazySingleton<DeletePostRemoteDataSource>(() => DeletePostRemoteDataSourceImpl(apiService: sl()));
 
   // Feed Feature
-  sl.registerFactory(() => FeedBloc(getFeeds: sl()));
+  sl.registerFactory(() => FeedBloc(
+        getFeeds: sl(),
+        repository: sl(),
+      ));
   sl.registerLazySingleton(() => GetFeeds(sl()));
   sl.registerLazySingleton<FeedRepository>(() => FeedRepositoryImpl(
         remoteDataSource: sl<FeedRemoteDataSource>(),
         networkInfo: sl(),
       ));
-  sl.registerLazySingleton<FeedRemoteDataSource>(() => FeedRemoteDataSourceImpl(apiService: sl()));
+  sl.registerLazySingleton<FeedRemoteDataSource>(() => FeedRemoteDataSourceImpl(
+        apiService: sl(),
+        cacheManager: sl(),
+      ));
 
   // Search Feature
   sl.registerLazySingleton(() => SearchPeople(sl()));
@@ -290,7 +309,6 @@ void init() {
   sl.registerFactory(() => YoutubeBloc(searchVideos: sl<youtube.SearchVideos>(), downloadVideo: sl()));
 
   // Reels Feature
-  // Register dependencies in order: repository → use cases → bloc
   sl.registerLazySingleton<ReelsRepository>(() => ReelsRepositoryImpl(
         remoteDataSource: sl<ReelsRemoteDataSource>(),
         networkInfo: sl(),
@@ -299,14 +317,12 @@ void init() {
         apiService: sl(),
         cacheManager: sl(),
       ));
-// Use cases
   sl.registerLazySingleton(() => GetReels(sl()));
   sl.registerLazySingleton(() => LikeReel(sl()));
   sl.registerLazySingleton(() => RepostReel(sl()));
   sl.registerLazySingleton(() => ShareReel(sl()));
   sl.registerLazySingleton(() => DeleteReel(sl()));
   sl.registerLazySingleton(() => GetShareTargets(sl()));
-// Blocs
   sl.registerFactory(() => ReelsBloc(
         getReels: sl(),
         likeReel: sl(),
@@ -323,4 +339,6 @@ void init() {
   print('DEBUG: Registered LikeReel: ${sl.isRegistered<LikeReel>()}');
   print('DEBUG: Registered RepostReel: ${sl.isRegistered<RepostReel>()}');
   print('DEBUG: Registered ReelsBloc: ${sl.isRegistered<ReelsBloc>()}');
+  print('DEBUG: Registered FeedRemoteDataSource: ${sl.isRegistered<FeedRemoteDataSource>()}');
+  print('DEBUG: Registered ShareRepository: ${sl.isRegistered<ShareRepository>()}');
 }

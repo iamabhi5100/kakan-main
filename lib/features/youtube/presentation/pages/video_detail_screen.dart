@@ -8,7 +8,6 @@ import 'package:kakan/features/youtube/domain/entities/video_entity.dart';
 import 'package:kakan/features/youtube/presentation/bloc/youtube_bloc.dart';
 import 'package:kakan/features/youtube/presentation/bloc/youtube_event.dart';
 import 'package:kakan/features/youtube/presentation/bloc/youtube_state.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
 class VideoDetailScreen extends StatefulWidget {
@@ -21,69 +20,10 @@ class VideoDetailScreen extends StatefulWidget {
 }
 
 class _VideoDetailScreenState extends State<VideoDetailScreen> {
-  late WebViewController _webViewController;
-  bool _isWebViewLoaded = false;
-
   @override
   void initState() {
     super.initState();
     print('VideoDetailScreen: Initializing for video ID: ${widget.video.id}');
-    _webViewController = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (url) {
-            setState(() {
-              _isWebViewLoaded = true;
-            });
-            print('VideoDetailScreen: WebView loaded for $url');
-          },
-          onWebResourceError: (error) {
-            print('VideoDetailScreen: WebView error: ${error.description}');
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse('https://www.youtube.com/watch?v=${widget.video.id}'));
-  }
-
-  @override
-  void dispose() {
-    print('VideoDetailScreen: Disposing');
-    super.dispose();
-  }
-
-  String _formatViews(int views) {
-    if (views >= 1000000000) return "${(views / 1000000000).toStringAsFixed(1)}B views";
-    if (views >= 1000000) return "${(views / 1000000).toStringAsFixed(1)}M views";
-    if (views >= 1000) return "${(views / 1000).toStringAsFixed(1)}K views";
-    return "$views views";
-  }
-
-  String _publishedAgo(String? publishedDate) {
-    if (publishedDate == null || publishedDate.isEmpty) return "";
-    try {
-      final dt = DateTime.parse(publishedDate);
-      final now = DateTime.now();
-      final diff = now.difference(dt);
-      if (diff.inDays >= 365) {
-        final years = (diff.inDays / 365).floor();
-        return "$years year${years > 1 ? 's' : ''} ago";
-      } else if (diff.inDays >= 30) {
-        final months = (diff.inDays / 30).floor();
-        return "$months month${months > 1 ? 's' : ''} ago";
-      } else if (diff.inDays >= 1) {
-        return "${diff.inDays} day${diff.inDays > 1 ? 's' : ''} ago";
-      } else if (diff.inHours >= 1) {
-        return "${diff.inHours} hour${diff.inHours > 1 ? 's' : ''} ago";
-      } else if (diff.inMinutes >= 1) {
-        return "${diff.inMinutes} minute${diff.inMinutes > 1 ? 's' : ''} ago";
-      } else {
-        return "Just now";
-      }
-    } catch (_) {
-      return "";
-    }
   }
 
   Future<bool> _checkAndRequestPermissions() async {
@@ -134,7 +74,7 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
           message.contains('restricted') ||
           message.contains('403') ||
           message.contains('No available video streams')) {
-        displayMessage = 'This video is restricted or unavailable for download. Try another video or download audio instead.';
+        displayMessage = 'This video is restricted or unavailable for download.';
       } else if (message.contains('Rate limit exceeded')) {
         displayMessage = 'Rate limit reached. Please wait a few minutes and try again.';
       } else if (message.contains('Request Entity Too Large')) {
@@ -151,6 +91,7 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                   message.contains('No available video streams')
               ? SnackBarAction(
                   label: 'Download Audio',
+                  textColor: Colors.yellow,
                   onPressed: () {
                     context.read<YoutubeBloc>().add(
                           DownloadVideoEvent(
@@ -165,6 +106,39 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
               : null,
         ),
       );
+    }
+  }
+
+  String _formatViews(int views) {
+    if (views >= 1000000000) return "${(views / 1000000000).toStringAsFixed(1)}B views";
+    if (views >= 1000000) return "${(views / 1000000).toStringAsFixed(1)}M views";
+    if (views >= 1000) return "${(views / 1000).toStringAsFixed(1)}K views";
+    return "$views views";
+  }
+
+  String _publishedAgo(String? publishedDate) {
+    if (publishedDate == null || publishedDate.isEmpty) return "";
+    try {
+      final dt = DateTime.parse(publishedDate);
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inDays >= 365) {
+        final years = (diff.inDays / 365).floor();
+        return "$years year${years > 1 ? 's' : ''} ago";
+      } else if (diff.inDays >= 30) {
+        final months = (diff.inDays / 30).floor();
+        return "$months month${months > 1 ? 's' : ''} ago";
+      } else if (diff.inDays >= 1) {
+        return "${diff.inDays} day${diff.inDays > 1 ? 's' : ''} ago";
+      } else if (diff.inHours >= 1) {
+        return "${diff.inHours} hour${diff.inHours > 1 ? 's' : ''} ago";
+      } else if (diff.inMinutes >= 1) {
+        return "${diff.inMinutes} minute${diff.inMinutes > 1 ? 's' : ''} ago";
+      } else {
+        return "Just now";
+      }
+    } catch (_) {
+      return "";
     }
   }
 
@@ -264,9 +238,16 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                       borderRadius: BorderRadius.circular(12),
                       child: AspectRatio(
                         aspectRatio: 16 / 9,
-                        child: _isWebViewLoaded
-                            ? WebViewWidget(controller: _webViewController)
-                            : const Center(child: CircularProgressIndicator()),
+                        child: Image.network(
+                          widget.video.thumbnailUrl ?? 'https://via.placeholder.com/1280x720',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => const Center(
+                            child: Text(
+                              'Unable to load thumbnail',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -304,7 +285,8 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                                 color: isDark ? Colors.grey[400] : Colors.grey[600],
                               ),
                             ),
-                            if (widget.video.publishedDate != null && widget.video.publishedDate!.isNotEmpty) ...[
+                            if (widget.video.publishedDate != null &&
+                                widget.video.publishedDate!.isNotEmpty) ...[
                               const SizedBox(width: 8),
                               Text(
                                 '• ${_publishedAgo(widget.video.publishedDate)}',
@@ -353,7 +335,8 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14, horizontal: 24),
                                 ),
                                 onPressed: () async {
                                   print('VideoDetailScreen: Download Video button pressed');
@@ -381,12 +364,14 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
                               ElevatedButton.icon(
                                 icon: const Icon(Icons.music_note_rounded),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: isDark ? Colors.deepPurpleAccent : Colors.green,
+                                  backgroundColor:
+                                      isDark ? Colors.deepPurpleAccent : Colors.green,
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14, horizontal: 24),
                                 ),
                                 onPressed: () async {
                                   print('VideoDetailScreen: Download Audio button pressed');

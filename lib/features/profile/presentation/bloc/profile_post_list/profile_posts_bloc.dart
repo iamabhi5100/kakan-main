@@ -18,11 +18,13 @@ class ProfilePostsBloc extends Bloc<ProfilePostsEvent, ProfilePostsState> {
     Emitter<ProfilePostsState> emit,
   ) async {
     if (kDebugMode) {
-      print('ProfilePostsBloc: Fetching posts for mediaType: ${event.mediaType}');
+      print('ProfilePostsBloc: Fetching posts for userId: ${event.userId}, mediaType: ${event.mediaType}');
     }
     try {
       emit(ProfilePostsLoading());
-      final result = await getProfilePosts(event.mediaType);
+      final result = await getProfilePosts(
+        GetProfilePostsParams(mediaType: event.mediaType, userId: event.userId),
+      );
       result.fold(
         (failure) {
           if (kDebugMode) {

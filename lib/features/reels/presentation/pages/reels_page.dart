@@ -17,7 +17,7 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
   late PageController _pageController;
   late ReelsBloc _reelsBloc;
   int _currentIndex = 0;
-  final int _preloadRange = 0; // Changed to 0 to reduce buffer usage
+  final int _preloadRange = 0;
   final int _fetchThreshold = 3;
 
   @override
@@ -47,13 +47,15 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
       setState(() {
         _currentIndex = page;
       });
+      print('DEBUG: Page changed to index $_currentIndex');
       _checkForMoreReels();
     }
   }
 
   void _checkForMoreReels() {
     final state = _reelsBloc.state;
-    if (state is ReelsLoaded) {
+    // FIX: Check against ReelsActionState to be more robust
+    if (state is ReelsActionState) {
       if (_currentIndex >= state.reels.length - _fetchThreshold && state.hasMore) {
         print('DEBUG: Fetching more reels at index $_currentIndex');
         _reelsBloc.add(FetchMoreReelsEvent());
@@ -89,6 +91,15 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
           child: RefreshIndicator(
             onRefresh: _refreshReels,
             child: BlocBuilder<ReelsBloc, ReelsState>(
+              // THIS IS THE FIX:
+              // We tell the builder to only rebuild if the state is NOT one
+              // of the comment-specific states. This prevents the main UI from
+              // resetting when the comment sheet is being used.
+              buildWhen: (previous, current) {
+                return current is! ReelCommentsLoading &&
+                    current is! ReelCommentsLoaded &&
+                    current is! ReelCommentsError;
+              },
               builder: (context, state) {
                 print('DEBUG: ReelsBloc state: $state');
                 if (state is ReelsLoading && state.reels.isEmpty) {
@@ -101,7 +112,7 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Text(
-                          'No Reels Available',
+                          'No Trims Available',
                           style: TextStyle(color: Colors.white),
                         ),
                         ElevatedButton(
@@ -111,29 +122,10 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
                       ],
                     ),
                   );
-                } else if (state is ReelsLoaded ||
-                    state is ReelsLikeUpdating ||
-                    state is ReelsRepostUpdating ||
-                    state is ReelsLikeError ||
-                    state is ReelsShareTargetsLoaded) {
-                  final reels = state is ReelsLoaded
-                      ? state.reels
-                      : state is ReelsLikeUpdating
-                          ? state.reels
-                          : state is ReelsRepostUpdating
-                              ? state.reels
-                              : state is ReelsShareTargetsLoaded
-                                  ? state.reels
-                                  : (state as ReelsLikeError).reels;
-                  final hasMore = state is ReelsLoaded
-                      ? state.hasMore
-                      : state is ReelsLikeUpdating
-                          ? state.hasMore
-                          : state is ReelsRepostUpdating
-                              ? state.hasMore
-                              : state is ReelsShareTargetsLoaded
-                                  ? state.hasMore
-                                  : (state as ReelsLikeError).hasMore;
+                } else if (state is ReelsActionState) { // Simplified check
+                  final reels = state.reels;
+                  final hasMore = state.hasMore;
+
                   return PageView.builder(
                     controller: _pageController,
                     scrollDirection: Axis.vertical,
@@ -144,10 +136,13 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
                           child: CircularProgressIndicator(color: Colors.white),
                         );
                       }
+                      final isPlaying = index == _currentIndex;
+                      final isPreload = (index - _currentIndex).abs() <= _preloadRange;
+                      print('DEBUG: Rendering ReelItem for index $index, isPlaying: $isPlaying, isPreload: $isPreload');
                       return ReelItem(
                         reel: reels[index],
-                        isPlaying: index == _currentIndex,
-                        isPreload: (index - _currentIndex).abs() <= _preloadRange,
+                        isPlaying: isPlaying,
+                        isPreload: isPreload,
                       );
                     },
                   );
@@ -170,7 +165,7 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
                 }
                 return const Center(
                   child: Text(
-                    'Initializing Reels...',
+                    'Initializing Trims...',
                     style: TextStyle(color: Colors.white),
                   ),
                 );

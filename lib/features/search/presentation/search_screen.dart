@@ -77,8 +77,6 @@ class _TabsSearchScreenState extends State<TabsSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).primaryColor;
-
     Widget content;
     switch (_currentIndex) {
       case 0:
@@ -139,26 +137,27 @@ class _TabsSearchScreenState extends State<TabsSearchScreen> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
-                      color: selected ? primary : Colors.white,
+                      color: selected ? Colors.black : Colors.grey[800],
                       border: Border.all(
-                          color:
-                              selected ? primary : Colors.grey.shade300),
+                          color: selected ? Colors.black : Colors.grey[600]!),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
                       children: [
-                        Icon(seg.icon,
-                            size: 16,
-                            color:
-                                selected ? Colors.white : Colors.black54),
+                        Icon(
+                          seg.icon,
+                          size: 16,
+                          color: Colors.white,
+                        ),
                         const SizedBox(width: 6),
-                        Text(seg.label,
-                            style: TextStyle(
-                                color: selected
-                                    ? Colors.white
-                                    : Colors.black54,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 14)),
+                        Text(
+                          seg.label,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                        ),
                       ],
                     ),
                   ),

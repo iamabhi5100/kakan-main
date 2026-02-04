@@ -1,15 +1,15 @@
 class ConstantApi {
-  static const String baseUrl = 'https://kakan.backend.xade.in';
+  static const String baseUrl = 'https://staging.api.kakan.co';
   static const String apiVersion = '1';
 
   // Login Feature
   static const String getOtp = '/v$apiVersion/user/auth/get-otp/';
   static const String verifyOtp = '/v$apiVersion/user/auth/verify/';
   static const String refreshToken = '/v$apiVersion/user/auth/refresh/';
-  static const String userProfile = '/v$apiVersion/user/{{user_id}}/';
+  static const String userProfile = '/v$apiVersion/user/{{user_id}}/'; // Updated to correct endpoint
 
   // FollowSuggestions Feature
-  static const String followSuggestions = '/v$apiVersion/user/';
+  static const String followSuggestions = '/v$apiVersion/user/discover-people/';
   static const String followUser = '/v$apiVersion/user/%s/follow/';
   static const String unfollowUser = '/v$apiVersion/user/%s/unfollow/';
 

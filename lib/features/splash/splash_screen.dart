@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:kakan/core/utils/session_manager.dart';
+import 'package:kakan/injection_container.dart' as di;
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -7,54 +10,41 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
+class _SplashScreenState extends State<SplashScreen> {
+  final _session = di.sl<SessionManager>();
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
-    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    _controller.forward();
+    // Let a first frame render, then run async logic to avoid any blank frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _decideRoute());
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  Future<void> _decideRoute() async {
+    try {
+      final token = await _session.getAccessToken();
+      if (!mounted) return;
+      if (token != null && token.isNotEmpty) {
+        context.go('/home');
+      } else {
+        context.go('/login');
+      }
+    } catch (_) {
+      if (!mounted) return;
+      context.go('/login');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // Paint something (white background + logo/spinner) immediately.
+    return const Scaffold(
       backgroundColor: Colors.white,
       body: Center(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: const Text(
-              'Kakan',
-              style: TextStyle(
-                fontFamily: 'Prosto One',
-                fontWeight: FontWeight.w400,
-                fontSize: 40.21,
-                height: 1.4,
-                letterSpacing: -0.8042,
-                color: Color(0xFF5856D6),
-              ),
-            ),
-          ),
+        child: SizedBox(
+          width: 72,
+          height: 72,
+          child: CircularProgressIndicator(strokeWidth: 3),
         ),
       ),
     );

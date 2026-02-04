@@ -1,11 +1,9 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:kakan/features/chat/presentation/widgets/video_player_widget.dart';
-import 'package:video_player/video_player.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:kakan/config/theme.dart';
 import 'package:kakan/core/utils/session_manager.dart';
@@ -18,6 +16,7 @@ import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_blo
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_event.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_state.dart';
 import 'package:kakan/injection_container.dart' as di;
+import 'package:kakan/features/chat/presentation/widgets/video_player_widget.dart';
 import 'dart:developer' as developer;
 
 class ChatScreen extends StatefulWidget {
@@ -44,9 +43,8 @@ class _ChatScreenState extends State<ChatScreen> {
   List<MessageModel> _messages = [];
   String? _currentUserId;
   final ImagePicker _picker = ImagePicker();
-  final String _baseUrl = 'https://kakan.backend.xade.in';
+  final String _baseUrl = 'https://staging.api.kakan.co';
 
-  // Keys to pause all media
   final List<GlobalKey<VideoPlayerWidgetState>> _videoKeys = [];
   final List<GlobalKey<AudioPlayerWidgetState>> _audioKeys = [];
 
@@ -58,16 +56,16 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
-  Future<void> _loadCurrentUserId() async {
-    _currentUserId = await di.sl<SessionManager>().getUserId();
-    setState(() {});
-  }
-
   @override
   void dispose() {
     _scrollController.dispose();
     _textController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCurrentUserId() async {
+    _currentUserId = await di.sl<SessionManager>().getUserId();
+    setState(() {});
   }
 
   void _scrollToBottom() {
@@ -81,8 +79,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _pauseAllMedia() {
-    for (var k in _videoKeys) k.currentState?.pause();
-    for (var k in _audioKeys) k.currentState?.pause();
+    for (final k in _videoKeys) {
+      k.currentState?.pause();
+    }
+    for (final k in _audioKeys) {
+      k.currentState?.pause();
+    }
   }
 
   void _sendMessage() {
@@ -93,6 +95,7 @@ class _ChatScreenState extends State<ChatScreen> {
         : SendMessageEvent(widget.chatId, text);
     context.read<ChatBloc>().add(event);
     _textController.clear();
+    _scrollToBottom();
   }
 
   void _showMediaTypeModal() {
@@ -149,9 +152,10 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             ListTile(
               leading: Icon(
-                  mediaType == 'video' ? Icons.photo_library : Icons.library_music,
-                  size: 30,
-                  color: mediaType == 'video' ? Colors.blue : Colors.teal),
+                mediaType == 'video' ? Icons.photo_library : Icons.library_music,
+                size: 30,
+                color: mediaType == 'video' ? Colors.blue : Colors.teal,
+              ),
               title: const Text('From Gallery'),
               onTap: () {
                 Navigator.pop(context);
@@ -160,9 +164,10 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             ListTile(
               leading: Icon(
-                  mediaType == 'video' ? Icons.video_collection : Icons.headphones,
-                  size: 30,
-                  color: mediaType == 'video' ? Colors.pink : Colors.orange),
+                mediaType == 'video' ? Icons.video_collection : Icons.headphones,
+                size: 30,
+                color: mediaType == 'video' ? Colors.pink : Colors.orange,
+              ),
               title: const Text('From Library'),
               onTap: () {
                 Navigator.pop(context);
@@ -250,11 +255,12 @@ class _ChatScreenState extends State<ChatScreen> {
               if (state is DownloadsLoaded && state.downloads.isEmpty) {
                 return Center(child: Text('No ${mediaType}s found'));
               }
+              final loaded = state as DownloadsLoaded;
               return ListView.builder(
                 controller: controller,
-                itemCount: (state as DownloadsLoaded).downloads.length,
+                itemCount: loaded.downloads.length,
                 itemBuilder: (_, i) {
-                  final d = state.downloads[i];
+                  final d = loaded.downloads[i];
                   return ListTile(
                     leading: mediaType == 'video' && d.thumbnail != null
                         ? Image.network(
@@ -335,17 +341,15 @@ class _ChatScreenState extends State<ChatScreen> {
         final imageUrl = m.mediaFile!.startsWith('http')
             ? m.mediaFile!
             : '$_baseUrl${m.mediaFile}';
-        developer.log('Building image bubble with URL: $imageUrl');
         content = ImagePreviewWidget(
           imageUrl: imageUrl,
           pauseAll: _pauseAllMedia,
         );
         break;
-      case 'video':
+      case 'video': {
         final videoUrl = m.mediaFile!.startsWith('http')
             ? m.mediaFile!
             : '$_baseUrl${m.mediaFile}';
-        developer.log('Building video bubble with URL: $videoUrl');
         final key = GlobalKey<VideoPlayerWidgetState>();
         _videoKeys.add(key);
         content = VideoPlayerWidget(
@@ -355,11 +359,11 @@ class _ChatScreenState extends State<ChatScreen> {
           onKeyRemoved: (k) => _videoKeys.remove(k),
         );
         break;
-      case 'audio':
+      }
+      case 'audio': {
         final audioUrl = m.mediaFile!.startsWith('http')
             ? m.mediaFile!
             : '$_baseUrl${m.mediaFile}';
-        developer.log('Building audio bubble with URL: $audioUrl');
         final key = GlobalKey<AudioPlayerWidgetState>();
         _audioKeys.add(key);
         content = AudioPlayerWidget(
@@ -369,6 +373,7 @@ class _ChatScreenState extends State<ChatScreen> {
           onKeyRemoved: (k) => _audioKeys.remove(k),
         );
         break;
+      }
       default:
         content = const SizedBox.shrink();
     }
@@ -388,7 +393,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ? m.senderDetails.profileImage!
                           : '$_baseUrl${m.senderDetails.profileImage}',
                     )
-                  : const AssetImage('assets/images/avatar1.png') as ImageProvider,
+                  : const AssetImage('assets/images/avataruser.png') as ImageProvider,
             ),
           if (!sent) const SizedBox(width: 8),
           Flexible(
@@ -413,10 +418,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           if (sent) const SizedBox(width: 8),
           if (sent)
-            CircleAvatar(
+            const CircleAvatar(
               radius: 16,
-              backgroundImage: const AssetImage('assets/images/avatar1.png'),
-              backgroundColor: Colors.grey[300],
+              backgroundImage: AssetImage('assets/images/avataruser.png'),
             ),
         ],
       ),
@@ -444,7 +448,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           ? widget.receiver.followedToDetails.profileImage!
                           : '$_baseUrl${widget.receiver.followedToDetails.profileImage}',
                     )
-                  : const AssetImage('assets/images/avatar1.png') as ImageProvider,
+                  : const AssetImage('assets/images/avataruser.png') as ImageProvider,
             ),
             const SizedBox(width: 12),
             Column(
@@ -461,23 +465,19 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
                 if (!widget.isGroup)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
                     child: Row(
                       children: [
-                        Container(
+                        SizedBox(
                           width: 8,
                           height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Online',
-                          style: TextStyle(fontSize: 12, color: Colors.black38),
-                        ),
+                        SizedBox(width: 6),
+                        Text('Online', style: TextStyle(fontSize: 12, color: Colors.black38)),
                       ],
                     ),
                   ),
@@ -489,10 +489,17 @@ class _ChatScreenState extends State<ChatScreen> {
       body: BlocConsumer<ChatBloc, ChatState>(
         listener: (ctx, st) {
           if (st is ChatMessagesLoaded) {
-            _messages = List.from(st.messages);
-            _scrollToBottom();
+            if (st.messages.length != _messages.length ||
+                !st.messages.every((msg) => _messages.any((m) => m.id == msg.id))) {
+              setState(() {
+                _messages = List.from(st.messages);
+              });
+              _scrollToBottom();
+            }
           } else if (st is MessageSent) {
-            _messages.insert(0, st.message);
+            setState(() {
+              _messages.insert(0, st.message);
+            });
             _scrollToBottom();
           } else if (st is ChatError) {
             ScaffoldMessenger.of(ctx).showSnackBar(
@@ -741,61 +748,6 @@ class AudioPlayerWidgetState extends State<AudioPlayerWidget> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class FullScreenVideoPage extends StatefulWidget {
-  final VideoPlayerController controller;
-
-  const FullScreenVideoPage({Key? key, required this.controller}) : super(key: key);
-
-  @override
-  State<FullScreenVideoPage> createState() => _FullScreenVideoPageState();
-}
-
-class _FullScreenVideoPageState extends State<FullScreenVideoPage> {
-  @override
-  void initState() {
-    super.initState();
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  }
-
-  @override
-  void dispose() {
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: widget.controller.value.isInitialized
-            ? FittedBox(
-                fit: BoxFit.contain,
-                child: SizedBox(
-                  width: widget.controller.value.size.width,
-                  height: widget.controller.value.size.height,
-                  child: VideoPlayer(widget.controller),
-                ),
-              )
-            : const CircularProgressIndicator(),
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: appTheme.primaryColor,
-        child: const Icon(Icons.close, color: Colors.white),
-        onPressed: () => Navigator.pop(context),
       ),
     );
   }

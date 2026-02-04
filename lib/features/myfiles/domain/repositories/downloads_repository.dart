@@ -3,5 +3,5 @@ import 'package:kakan/core/error/failures.dart';
 import 'package:kakan/features/myfiles/domain/entities/download_entity.dart';
 
 abstract class DownloadsRepository {
-  Future<Either<Failure, List<DownloadEntity>>> getDownloads(String mediaType);
+  Future<Either<Failure, List<DownloadEntity>>> getDownloads(String mediaType, {String? search});
 }

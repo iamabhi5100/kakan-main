@@ -1,0 +1,5 @@
+# Reduce noise: example and pigeons need their own pub get / are codegen.
+analyzer:
+  exclude:
+    - example/**
+    - pigeons/**

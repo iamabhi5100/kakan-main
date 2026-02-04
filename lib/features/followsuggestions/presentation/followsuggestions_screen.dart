@@ -292,7 +292,7 @@ class _UserCard extends StatelessWidget {
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         return Image.asset(
-                          'assets/images/boys.png',
+                          'assets/images/avataruser.png',
                           width: 40,
                           height: 40,
                           fit: BoxFit.cover,
@@ -300,7 +300,7 @@ class _UserCard extends StatelessWidget {
                       },
                     )
                   : Image.asset(
-                      'assets/images/boys.png',
+                      'assets/images/avataruser.png',
                       width: 40,
                       height: 40,
                       fit: BoxFit.cover,

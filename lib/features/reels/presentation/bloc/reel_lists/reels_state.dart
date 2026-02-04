@@ -9,64 +9,45 @@ abstract class ReelsState extends Equatable {
 
 class ReelsInitial extends ReelsState {}
 
-class ReelsLoading extends ReelsState {
+// Base state for when reels are loaded or being updated
+abstract class ReelsActionState extends ReelsState {
   final List<ReelEntity> reels;
   final bool hasMore;
   final String? nextUrl;
 
-  const ReelsLoading(this.reels, this.hasMore, this.nextUrl);
+  const ReelsActionState(this.reels, this.hasMore, this.nextUrl);
 
   @override
   List<Object> get props => [reels, hasMore, nextUrl ?? ''];
 }
 
-class ReelsLoaded extends ReelsState {
-  final List<ReelEntity> reels;
-  final bool hasMore;
-  final String? nextUrl;
-
-  const ReelsLoaded(this.reels, this.hasMore, this.nextUrl);
-
-  @override
-  List<Object> get props => [reels, hasMore, nextUrl ?? ''];
+class ReelsLoading extends ReelsActionState {
+  const ReelsLoading(super.reels, super.hasMore, super.nextUrl);
 }
 
-class ReelsLikeUpdating extends ReelsState {
-  final List<ReelEntity> reels;
-  final bool hasMore;
-  final String? nextUrl;
-
-  const ReelsLikeUpdating(this.reels, this.hasMore, this.nextUrl);
-
-  @override
-  List<Object> get props => [reels, hasMore, nextUrl ?? ''];
+class ReelsLoaded extends ReelsActionState {
+  const ReelsLoaded(super.reels, super.hasMore, super.nextUrl);
 }
 
-class ReelsRepostUpdating extends ReelsState {
-  final List<ReelEntity> reels;
-  final bool hasMore;
-  final String? nextUrl;
-
-  const ReelsRepostUpdating(this.reels, this.hasMore, this.nextUrl);
-
-  @override
-  List<Object> get props => [reels, hasMore, nextUrl ?? ''];
+class ReelsLikeUpdating extends ReelsActionState {
+  const ReelsLikeUpdating(super.reels, super.hasMore, super.nextUrl);
 }
 
-class ReelsShareTargetsLoaded extends ReelsState {
-  final List<ReelEntity> reels;
-  final bool hasMore;
-  final String? nextUrl;
+class ReelsRepostUpdating extends ReelsActionState {
+  const ReelsRepostUpdating(super.reels, super.hasMore, super.nextUrl);
+}
+
+class ReelsShareTargetsLoaded extends ReelsActionState {
   final List<ShareTargetEntity> shareTargets;
   final String reelId;
 
   const ReelsShareTargetsLoaded({
-    required this.reels,
-    required this.hasMore,
-    required this.nextUrl,
+    required List<ReelEntity> reels,
+    required bool hasMore,
+    required String? nextUrl,
     required this.shareTargets,
     required this.reelId,
-  });
+  }) : super(reels, hasMore, nextUrl); // FIX: Added super constructor call
 
   @override
   List<Object> get props => [reels, hasMore, nextUrl ?? '', shareTargets, reelId];
@@ -74,28 +55,39 @@ class ReelsShareTargetsLoaded extends ReelsState {
 
 class ReelsError extends ReelsState {
   final String message;
-
   const ReelsError({required this.message});
-
   @override
   List<Object> get props => [message];
 }
 
-class ReelsLikeError extends ReelsState {
+class ReelsLikeError extends ReelsActionState {
   final String message;
-  final List<ReelEntity> reels;
-  final bool hasMore;
-  final String? nextUrl;
-
   const ReelsLikeError({
     required this.message,
-    required this.reels,
-    required this.hasMore,
-    required this.nextUrl,
-  });
+    required List<ReelEntity> reels,
+    required bool hasMore,
+    required String? nextUrl,
+  }) : super(reels, hasMore, nextUrl); // FIX: Added super constructor call
 
   @override
   List<Object> get props => [message, reels, hasMore, nextUrl ?? ''];
 }
 
 class ReelsEmpty extends ReelsState {}
+
+// ADDED FOR COMMENTS
+class ReelCommentsLoading extends ReelsState {}
+
+class ReelCommentsLoaded extends ReelsState {
+  final List<CommentEntity> comments;
+  const ReelCommentsLoaded(this.comments);
+  @override
+  List<Object> get props => [comments];
+}
+
+class ReelCommentsError extends ReelsState {
+  final String message;
+  const ReelCommentsError(this.message);
+  @override
+  List<Object> get props => [message];
+}

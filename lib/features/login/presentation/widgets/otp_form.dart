@@ -1,5 +1,3 @@
-// lib/features/login/presentation/widgets/otp_form.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -12,6 +10,7 @@ import 'package:kakan/features/login/presentation/bloc/otp_bloc.dart';
 import 'package:kakan/features/login/presentation/bloc/otp_event.dart';
 import 'package:kakan/features/login/presentation/bloc/otp_state.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class OTPForm extends StatefulWidget {
   final String phone;
@@ -38,6 +37,7 @@ class _OTPFormState extends State<OTPForm> {
   @override
   void initState() {
     super.initState();
+    Fluttertoast.cancel(); // Cancel any existing toasts
     _startResendTimer();
   }
 
@@ -54,7 +54,7 @@ class _OTPFormState extends State<OTPForm> {
   @override
   void dispose() {
     _timer.cancel();
-    _otpController.dispose();           // we now dispose manually
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -72,8 +72,13 @@ class _OTPFormState extends State<OTPForm> {
 
     final otpToken = await _sessionManager.getOtpToken();
     if (otpToken == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('OTP token is missing')),
+      Fluttertoast.showToast(
+        msg: 'OTP token is missing',
+        toastLength: Toast.LENGTH_LONG,
+        gravity: ToastGravity.TOP,
+        backgroundColor: Colors.red,
+        textColor: Colors.white,
+        fontSize: 16.0,
       );
       return;
     }
@@ -97,10 +102,9 @@ class _OTPFormState extends State<OTPForm> {
                   key: _formKey,
                   autovalidateMode: AutovalidateMode.onUserInteraction,
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,  // pushes Submit down
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Top block
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -165,12 +169,11 @@ class _OTPFormState extends State<OTPForm> {
                             ],
                           ),
                           const Gap(40),
-                          // PinCode field with autoDisposeControllers turned off
                           PinCodeTextField(
                             appContext: context,
                             length: 6,
                             controller: _otpController,
-                            autoDisposeControllers: false,  // <— prevents widget from disposing it
+                            autoDisposeControllers: false,
                             keyboardType: TextInputType.number,
                             enabled:
                                 !(context.watch<OtpBloc>().state is OtpLoading),
@@ -244,7 +247,9 @@ class _OTPFormState extends State<OTPForm> {
                                           _resendSeconds = 15;
                                           _startResendTimer();
                                         });
-                                        // TODO: resend-OTP API
+                                        context.read<OtpBloc>().add(
+                                            RequestOtpButtonPressed(
+                                                mobile: widget.phone));
                                       }
                                     : null,
                                 child: Text(
@@ -268,8 +273,6 @@ class _OTPFormState extends State<OTPForm> {
                           const Gap(40),
                         ],
                       ),
-
-                      // Bottom block: submit button
                       SizedBox(
                         width: double.infinity,
                         height: 50,
@@ -311,9 +314,8 @@ class _OTPFormState extends State<OTPForm> {
                 ),
               ),
             ),
-          );
-        },
-      ),
-    );
+        );
+  }),
+      );
   }
 }

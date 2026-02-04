@@ -1,11 +1,15 @@
+// lib/features/home/home_screen.dart
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
-import 'package:kakan/config/theme.dart';
+import 'package:kakan/config/constant_api.dart';
+import 'package:kakan/config/theme.dart' as config_theme;
+import 'package:kakan/core/network/api_service.dart';
 import 'package:kakan/core/utils/session_manager.dart';
 import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_bloc.dart';
+import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_event.dart';
 import 'package:kakan/features/home/presentation/widgets/feed_data_list.dart';
 import 'package:kakan/features/myfiles/presentation/myfiles_screen.dart';
 import 'package:kakan/features/postmyfeed/presentation/main_post_screen.dart';
@@ -16,6 +20,8 @@ import 'package:kakan/features/reels/presentation/pages/reels_page.dart';
 import 'package:kakan/features/widgets/bottom_navigation_widget.dart';
 import 'package:kakan/features/widgets/update_profile_widget.dart';
 import 'package:kakan/injection_container.dart' as di;
+import 'package:kakan/core/models/onboarding_form_args.dart';
+import 'package:kakan/features/login/data/datasources/remote_data_source.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,13 +36,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isAuthenticated = false;
   bool _showUpdateProfileCard = false;
   String? _username;
-  final SessionManager _sessionManager = di.sl<SessionManager>();
+  String? _profileImage;
   Future<Map<String, dynamic>>? _authStatusFuture;
+  final ApiService _apiService = di.sl<ApiService>();
+  final SessionManager _sessionManager = di.sl<SessionManager>();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (kDebugMode) {
+      print('HomeScreen: initState called');
+    }
     _authStatusFuture = _checkAuthStatus();
   }
 
@@ -51,54 +62,157 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (kDebugMode) {
+      print('HomeScreen: dispose called');
+    }
     super.dispose();
   }
 
   Future<Map<String, dynamic>> _checkAuthStatus() async {
     if (kDebugMode) {
       print('HomeScreen: Checking auth status');
-      final verifyOtpResponse = await _sessionManager.getVerifyOtpResponse();
-      print('HomeScreen: VerifyOtpResponse: ${verifyOtpResponse?.toJson()}');
     }
-    final token = await _sessionManager.getAccessToken();
-    final verifyOtpResponse = await _sessionManager.getVerifyOtpResponse();
+    try {
+      final token = await _sessionManager.getAccessToken();
+      if (token == null) {
+        if (kDebugMode) {
+          print('HomeScreen: No token found');
+        }
+        return {
+          'isAuthenticated': false,
+          'showUpdateProfileCard': false,
+          'username': 'Guest',
+          'profileImage': null,
+        };
+      }
 
-    final authData = {
-      'isAuthenticated': token != null,
-      'showUpdateProfileCard': verifyOtpResponse?.userDetails?.showUpdateProfileCard ?? false,
-      'username': verifyOtpResponse?.userDetails?.username ?? 'Guest',
-    };
+      final profileId = await _sessionManager.getProfileId();
+      if (profileId == null) {
+        if (kDebugMode) {
+          print('HomeScreen: No profileId found, redirecting to onboarding');
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          context.go(
+            '/onboarding-form',
+            extra: OnboardingFormArgs(
+              token: token,
+              remoteDataSource: di.sl<RemoteDataSource>(),
+            ),
+          );
+        });
+        return {
+          'isAuthenticated': false,
+          'showUpdateProfileCard': false,
+          'username': 'Guest',
+          'profileImage': null,
+        };
+      }
 
-    setState(() {
-      _isAuthenticated = authData['isAuthenticated'] as bool;
-      _showUpdateProfileCard = authData['showUpdateProfileCard'] as bool;
-      _username = authData['username'] as String;
-      _isLoading = false;
-    });
+      if (kDebugMode) {
+        print('HomeScreen: Fetching profile for profileId: $profileId');
+      }
+      final response = await _apiService.get(
+        ConstantApi.userProfile.replaceAll('{{user_id}}', profileId),
+        includeAuth: true,
+      );
 
-    return authData;
+      if (response is Map<String, dynamic>) {
+        if (kDebugMode) {
+          print('HomeScreen: Profile fetched successfully. Response: $response');
+        }
+        final authData = {
+          'isAuthenticated': true,
+          'showUpdateProfileCard': response['show_update_profile_card'] ?? false,
+          'username': response['username'] ?? 'Guest',
+          'profileImage': response['profile_image'],
+        };
+
+        setState(() {
+          _isAuthenticated = authData['isAuthenticated'] as bool;
+          _showUpdateProfileCard = authData['showUpdateProfileCard'] as bool;
+          _username = authData['username'] as String;
+          _profileImage = authData['profileImage'] as String?;
+          _isLoading = false;
+        });
+
+        if (kDebugMode) {
+          print('HomeScreen: Auth status updated: $_isAuthenticated, $_showUpdateProfileCard, $_username, $_profileImage');
+        }
+        return authData;
+      } else {
+        throw Exception('Invalid response format');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('HomeScreen: Error fetching user data: $e');
+      }
+      if (e.toString().contains('No UserProfile matches')) {
+        if (kDebugMode) {
+          print('HomeScreen: No profile found, redirecting to onboarding');
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          context.go(
+            '/onboarding-form',
+            extra: OnboardingFormArgs(
+              token: await _sessionManager.getAccessToken() ?? '',
+              remoteDataSource: di.sl<RemoteDataSource>(),
+            ),
+          );
+        });
+      } else {
+        if (kDebugMode) {
+          print('HomeScreen: Non-profile error, redirecting to login');
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          context.go('/login');
+        });
+      }
+      setState(() {
+        _isAuthenticated = false;
+        _showUpdateProfileCard = false;
+        _username = 'Guest';
+        _profileImage = null;
+        _isLoading = false;
+      });
+      return {
+        'isAuthenticated': false,
+        'showUpdateProfileCard': false,
+        'username': 'Guest',
+        'profileImage': null,
+      };
+    }
   }
 
   void _onNavTap(int index) {
     setState(() {
       _currentIndex = index;
       if (_currentIndex == 0) {
-        _authStatusFuture = _checkAuthStatus(); // Refresh auth status only for home feed
+        _authStatusFuture = _checkAuthStatus();
+        if (kDebugMode) {
+          print('HomeScreen: Nav tapped, index: $index, refreshing auth status');
+        }
       }
     });
   }
 
   Widget _getSelectedScreen() {
+    if (kDebugMode) {
+      print('HomeScreen: Building selected screen for index: $_currentIndex');
+    }
     switch (_currentIndex) {
       case 0:
+        // ---------- ONLY THIS CASE CHANGED TO AVOID NESTED SCROLL ----------
         return FutureBuilder<Map<String, dynamic>>(
           future: _authStatusFuture,
           builder: (context, snapshot) {
+            if (kDebugMode) {
+              print('HomeScreen: FutureBuilder state: ${snapshot.connectionState}');
+            }
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            if (snapshot.hasError) {
+            if (snapshot.hasError || !snapshot.hasData) {
               if (kDebugMode) {
                 print('HomeScreen: Error in _checkAuthStatus: ${snapshot.error}');
               }
@@ -106,29 +220,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             }
 
             final authData = snapshot.data!;
-            _showUpdateProfileCard = authData['showUpdateProfileCard'] as bool;
-            _username = authData['username'] as String;
+            _showUpdateProfileCard = authData['showUpdateProfileCard'] as bool? ?? false;
+            _username = authData['username'] as String? ?? 'Guest';
+            _profileImage = authData['profileImage'] as String?;
 
-            if (!authData['isAuthenticated']) {
+            if (authData['isAuthenticated'] != true) {
               if (kDebugMode) {
-                print('HomeScreen: Not authenticated, redirecting to login');
+                print('HomeScreen: Not authenticated, redirecting to login or onboarding');
               }
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                context.go('/login');
-              });
               return const Center(child: CircularProgressIndicator());
             }
 
-            return SingleChildScrollView(
-              child: Column(
-                children: [
-                  if (_showUpdateProfileCard) const UpdateNavProfileWidget(),
-                  const FeedDataList(),
-                ],
-              ),
+            if (kDebugMode) {
+              print('HomeScreen: Rendering feed with showUpdateProfileCard: $_showUpdateProfileCard');
+            }
+
+            // IMPORTANT: No SingleChildScrollView here.
+            // Give the scroll area to FeedDataList via Expanded.
+            return Column(
+              children: [
+                if (_showUpdateProfileCard) const UpdateNavProfileWidget(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      if (mounted) {
+                        // FIX: Use your existing event names
+                        context.read<FeedBloc>().add(const RefreshFeedsEvent());
+                        // If you prefer initial fetch semantics: 
+                        // context.read<FeedBloc>().add(const FetchFeedsEvent());
+                      }
+                    },
+                    // FeedDataList should be scrollable itself (no NeverScrollablePhysics inside).
+                    child: const FeedDataList(),
+                  ),
+                ),
+              ],
             );
           },
         );
+      // -------------------------------------------------------------------
       case 1:
         return const MyfilesScreen();
       case 2:
@@ -144,7 +274,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    if (kDebugMode) {
+      print('HomeScreen: build called');
+    }
     if (_isLoading) {
+      if (kDebugMode) {
+        print('HomeScreen: Showing loading indicator');
+      }
       return const Scaffold(
         backgroundColor: Colors.white,
         body: Center(child: CircularProgressIndicator()),
@@ -152,7 +288,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     return MultiBlocProvider(
-      providers: [ 
+      providers: [
         BlocProvider(create: (_) => di.sl<ProfilePostsBloc>()),
         BlocProvider(create: (_) => di.sl<FeedBloc>()),
         BlocProvider(create: (_) => di.sl<ProfiledetailsBloc>()),
@@ -164,7 +300,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               print('HomeScreen: Pop invoked, refreshing state');
             }
             setState(() {
-              _authStatusFuture = _checkAuthStatus(); // Trigger FutureBuilder rebuild
+              _authStatusFuture = _checkAuthStatus();
             });
           }
         },
@@ -180,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     },
                     child: Text(
                       'Hi, $_username',
-                      style: appTheme.textTheme.titleSmall?.copyWith(
+                      style: config_theme.appTheme.textTheme.titleSmall?.copyWith(
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
                       ),
@@ -192,8 +328,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         context.push('/youtube-dashboard');
                       },
                       child: Image.asset(
-                        'assets/images/youtubeicon.png',
-                        width: 80,
+                        'assets/images/youtubelogo.png',
+                        width: 40,
+                        height: 40,
                       ),
                     ),
                     const Gap(20),
@@ -226,6 +363,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           bottomNavigationBar: BottomNavigationWidget(
             currentIndex: _currentIndex,
             onTap: _onNavTap,
+            profileImage: _profileImage,
           ),
         ),
       ),

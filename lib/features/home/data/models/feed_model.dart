@@ -1,5 +1,3 @@
-// lib/features/home/data/models/feed_model.dart
-
 import 'package:kakan/features/home/model/entities/feed_entity.dart';
 
 class FeedModel extends FeedEntity {
@@ -13,6 +11,11 @@ class FeedModel extends FeedEntity {
     required String mediaFile,
     String? thumbnail,
     required String privacy,
+    required int likesCount,
+    required int repostCount,
+    required int commentsCount, // Added to constructor
+    required bool flagLiked,
+    required bool flagOwnPost,   // Added to constructor
   }) : super(
           id: id,
           userProfileDetails: userProfileDetails,
@@ -23,6 +26,11 @@ class FeedModel extends FeedEntity {
           mediaFile: mediaFile,
           thumbnail: thumbnail,
           privacy: privacy,
+          likesCount: likesCount,
+          repostCount: repostCount,
+          commentsCount: commentsCount, // Pass to super
+          flagLiked: flagLiked,
+          flagOwnPost: flagOwnPost,     // Pass to super
         );
 
   factory FeedModel.fromJson(Map<String, dynamic> json) {
@@ -36,6 +44,11 @@ class FeedModel extends FeedEntity {
       mediaFile: json['media_file']?.toString() ?? '',
       thumbnail: json['thumbnail']?.toString(),
       privacy: json['privacy']?.toString() ?? '',
+      likesCount: json['likes_count']?.toInt() ?? 0,
+      repostCount: json['repost_count']?.toInt() ?? 0,
+      commentsCount: json['comments_count']?.toInt() ?? 0, // Mapped from JSON
+      flagLiked: json['flag_liked'] ?? false,
+      flagOwnPost: json['flag_own_post'] ?? false,         // Mapped from JSON
     );
   }
 
@@ -50,38 +63,11 @@ class FeedModel extends FeedEntity {
       'media_file': mediaFile,
       'thumbnail': thumbnail,
       'privacy': privacy,
-    };
-  }
-}
-
-class UserProfileDetails {
-  final String id;
-  final String username;
-  final String name;
-  final String? profileImage;
-
-  UserProfileDetails({
-    required this.id,
-    required this.username,
-    required this.name,
-    this.profileImage,
-  });
-
-  factory UserProfileDetails.fromJson(Map<String, dynamic> json) {
-    return UserProfileDetails(
-      id: json['id']?.toString() ?? '',
-      username: json['username']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
-      profileImage: json['profile_image']?.toString(),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'username': username,
-      'name': name,
-      'profile_image': profileImage,
+      'likes_count': likesCount,
+      'repost_count': repostCount,
+      'comments_count': commentsCount, // Added to JSON
+      'flag_liked': flagLiked,
+      'flag_own_post': flagOwnPost,     // Added to JSON
     };
   }
 }

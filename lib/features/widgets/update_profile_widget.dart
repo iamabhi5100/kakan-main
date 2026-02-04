@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:kakan/config/theme.dart';
-import 'package:kakan/features/profile/presentation/pages/update_profile_screen.dart';
 
 class UpdateNavProfileWidget extends StatefulWidget {
   const UpdateNavProfileWidget({super.key});
@@ -31,9 +31,7 @@ class _UpdateNavProfileWidgetState extends State<UpdateNavProfileWidget> {
             ),
             child: CircleAvatar(
               radius: 25,
-              backgroundImage: const NetworkImage(
-                'https://picsum.photos/200',
-              ),
+              backgroundImage: const AssetImage('assets/images/avataruser.png'),
               backgroundColor: Colors.grey,
               onBackgroundImageError: (exception, stackTrace) {
                 if (kDebugMode) {
@@ -58,11 +56,7 @@ class _UpdateNavProfileWidgetState extends State<UpdateNavProfileWidget> {
                     if (kDebugMode) {
                       print('UpdateNavProfileWidget: Navigating to UpdateProfileScreen');
                     }
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const UpdateProfileScreen(),
-                      ),
-                    );
+                    context.go('/update-profile');
                   },
                   child: Text(
                     'Update profile',

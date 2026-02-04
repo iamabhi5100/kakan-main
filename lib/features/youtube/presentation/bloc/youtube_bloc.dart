@@ -1,57 +1,73 @@
 // lib/features/youtube/presentation/bloc/youtube_bloc.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:rxdart/rxdart.dart';
+import 'package:kakan/core/usecases/usecase.dart';
+import 'package:kakan/features/youtube/domain/usecases/fetch_home_videos.dart';
 import 'package:kakan/features/youtube/domain/usecases/search_videos.dart';
 import 'package:kakan/features/youtube/domain/usecases/download_video.dart';
+import 'package:kakan/features/youtube/model/video.dart';
 import 'package:kakan/features/youtube/presentation/bloc/youtube_event.dart';
 import 'package:kakan/features/youtube/presentation/bloc/youtube_state.dart';
-import 'package:rxdart/rxdart.dart';
+import 'package:kakan/core/error/exceptions.dart';
+import 'package:kakan/core/error/failures.dart';
 
 class YoutubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
   final SearchVideos searchVideos;
+  final FetchHomeVideos fetchHomeVideos;
   final DownloadVideo downloadVideo;
 
   YoutubeBloc({
     required this.searchVideos,
+    required this.fetchHomeVideos,
     required this.downloadVideo,
   }) : super(YoutubeInitial()) {
     on<SearchVideosEvent>(
       _onSearchVideos,
-      transformer: (events, mapper) => events.debounceTime(const Duration(milliseconds: 500)).asyncExpand(mapper),
-    );
-    on<DownloadVideoEvent>(
-      _onDownloadVideo,
-      transformer: (events, mapper) => events.debounceTime(const Duration(milliseconds: 500)).asyncExpand(mapper),
+      transformer: (events, mapper) =>
+          events.debounceTime(const Duration(milliseconds: 500)).asyncExpand(mapper),
     );
     on<FetchHomeVideosEvent>(
       _onFetchHomeVideos,
-      transformer: (events, mapper) => events.debounceTime(const Duration(milliseconds: 500)).asyncExpand(mapper),
+      transformer: (events, mapper) =>
+          events.debounceTime(const Duration(milliseconds: 500)).asyncExpand(mapper),
+    );
+    on<DownloadVideoEvent>(
+      _onDownloadVideo,
+      transformer: (events, mapper) =>
+          events.debounceTime(const Duration(milliseconds: 500)).asyncExpand(mapper),
     );
   }
 
-  Future<void> _onSearchVideos(SearchVideosEvent event, Emitter<YoutubeState> emit) async {
-    print('YoutubeBloc: Handling SearchVideosEvent with query: ${event.query}');
+  Future<void> _onSearchVideos(
+      SearchVideosEvent event, Emitter<YoutubeState> emit) async {
     emit(YoutubeLoading());
     final result = await searchVideos(event.query);
     result.fold(
       (failure) {
-        print('YoutubeBloc: Search failed - $failure');
-        String message = failure.toString();
-        if (message.contains('Too Many Requests')) {
-          message = 'Rate limit exceeded. Please try again later.';
-        }
+        final message = _extractMessage(failure);
         emit(YoutubeError(message));
       },
-      (videos) {
-        print('YoutubeBloc: Search successful, found ${videos.length} videos');
-        emit(YoutubeLoaded(videos: videos, isSearchResult: true));
-      },
+      (contents) => emit(YoutubeLoaded(contents: contents, isSearchResult: true)),
     );
   }
 
-  Future<void> _onDownloadVideo(DownloadVideoEvent event, Emitter<YoutubeState> emit) async {
-    print('YoutubeBloc: Handling DownloadVideoEvent for videoId: ${event.videoId}, title: ${event.title}, isAudioOnly: ${event.isAudioOnly}, preferredQuality: ${event.preferredQuality}');
-    double lastProgress = 0.0;
+  Future<void> _onFetchHomeVideos(
+      FetchHomeVideosEvent event, Emitter<YoutubeState> emit) async {
+    emit(YoutubeLoading());
+    final result = await fetchHomeVideos(NoParams());
+    result.fold(
+      (failure) {
+        final message = _extractMessage(failure);
+        emit(YoutubeError(message));
+      },
+      (response) => emit(YoutubeLoaded(contents: response.contents, isSearchResult: false)),
+    );
+  }
+
+  Future<void> _onDownloadVideo(
+      DownloadVideoEvent event, Emitter<YoutubeState> emit) async {
     emit(YoutubeDownloading(progress: 0.0));
+    double lastProgress = 0.0;
 
     final result = await downloadVideo(
       DownloadVideoParams(
@@ -60,10 +76,9 @@ class YoutubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
         isAudioOnly: event.isAudioOnly,
         preferredQuality: event.preferredQuality,
         progressCallback: (progress) {
-          if (progress - lastProgress > 0.05) {
-            print('YoutubeBloc: Progress update - ${progress * 100}%');
-            emit(YoutubeDownloading(progress: progress));
+          if ((progress - lastProgress) > 0.05) {
             lastProgress = progress;
+            emit(YoutubeDownloading(progress: progress));
           }
         },
       ),
@@ -71,46 +86,22 @@ class YoutubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
 
     result.fold(
       (failure) {
-        print('YoutubeBloc: Download failed - $failure');
-        String message = failure.toString();
-        if (message.contains('Too Many Requests')) {
-          message = 'Rate limit exceeded. Please try again later.';
-        } else if (message.contains('Video unavailable') || message.contains('restricted')) {
-          message = 'This video is unavailable, private, or restricted. Try a different quality or another video.';
-        } else if (message.contains('Invalid video ID')) {
-          message = 'Invalid video ID. Please check the video link.';
-        }
+        final message = _extractMessage(failure);
         emit(YoutubeError(message));
       },
-      (filePath) {
-        print('YoutubeBloc: Download successful, filePath: $filePath');
-        emit(YoutubeDownloaded(
-          filePath: filePath,
-          isAudioOnly: event.isAudioOnly,
-          videoId: event.videoId,
-          title: event.title,
-        ));
-      },
+      (filePath) => emit(YoutubeDownloaded(
+        filePath: filePath,
+        isAudioOnly: event.isAudioOnly,
+        videoId: event.videoId,
+        title: event.title,
+      )),
     );
   }
 
-  Future<void> _onFetchHomeVideos(FetchHomeVideosEvent event, Emitter<YoutubeState> emit) async {
-    print('YoutubeBloc: Handling FetchHomeVideosEvent');
-    emit(YoutubeLoading());
-    final result = await searchVideos('trending');
-    result.fold(
-      (failure) {
-        print('YoutubeBloc: Fetch home videos failed - $failure');
-        String message = failure.toString();
-        if (message.contains('Too Many Requests')) {
-          message = 'Rate limit exceeded. Please try again later.';
-        }
-        emit(YoutubeError(message));
-      },
-      (videos) {
-        print('YoutubeBloc: Fetch home videos successful, found ${videos.length} videos');
-        emit(YoutubeLoaded(videos: videos, isSearchResult: false));
-      },
-    );
+  String _extractMessage(Failure failure) {
+    if (failure is ServerFailure && failure.exception is ServerException) {
+      return (failure.exception as ServerException).message ?? 'Unknown server error';
+    }
+    return failure.toString();
   }
 }

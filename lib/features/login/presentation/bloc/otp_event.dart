@@ -1,3 +1,4 @@
+// lib/features/login/presentation/bloc/otp_event.dart
 import 'package:equatable/equatable.dart';
 
 abstract class OtpEvent extends Equatable {
@@ -16,9 +17,10 @@ class RequestOtpButtonPressed extends OtpEvent {
 class VerifyOtpButtonPressed extends OtpEvent {
   final String otp;
   final String otpToken;
-
-  const VerifyOtpButtonPressed({required this.otp, required this.otpToken});
-
+  const VerifyOtpButtonPressed({
+    required this.otp,
+    required this.otpToken,
+  });
   @override
   List<Object> get props => [otp, otpToken];
 }
@@ -26,9 +28,10 @@ class VerifyOtpButtonPressed extends OtpEvent {
 class CreateProfileButtonPressed extends OtpEvent {
   final String token;
   final Map<String, dynamic> profileData;
-
-  const CreateProfileButtonPressed({required this.token, required this.profileData});
-
+  const CreateProfileButtonPressed({
+    required this.token,
+    required this.profileData,
+  });
   @override
   List<Object> get props => [token, profileData];
 }

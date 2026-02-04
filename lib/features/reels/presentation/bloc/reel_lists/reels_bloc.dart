@@ -2,6 +2,10 @@ import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:kakan/core/error/failures.dart';
 import 'package:kakan/core/usecases/usecase.dart';
+import 'package:kakan/features/home/model/entities/feed_entity.dart';
+import 'package:kakan/features/home/model/usecases/add_comment.dart';
+import 'package:kakan/features/home/model/usecases/delete_comment.dart';
+import 'package:kakan/features/home/model/usecases/get_comments.dart';
 import 'package:kakan/features/reels/domain/entities/reel_entity.dart';
 import 'package:kakan/features/reels/domain/entities/share_target_entity.dart';
 import 'package:kakan/features/reels/domain/usecases/delete_reel.dart';
@@ -21,6 +25,11 @@ class ReelsBloc extends Bloc<ReelsEvent, ReelsState> {
   final ShareReel shareReel;
   final DeleteReel deleteReel;
   final GetShareTargets getShareTargets;
+  final GetComments getComments;
+  final AddComment addComment;
+  final DeleteComment deleteComment;
+
+  ReelsActionState? _cachedReelsState;
 
   ReelsBloc({
     required this.getReels,
@@ -29,152 +38,224 @@ class ReelsBloc extends Bloc<ReelsEvent, ReelsState> {
     required this.shareReel,
     required this.deleteReel,
     required this.getShareTargets,
+    required this.getComments,
+    required this.addComment,
+    required this.deleteComment,
   }) : super(ReelsInitial()) {
-    print('DEBUG: ReelsBloc initialized with getReels: $getReels, likeReel: $likeReel, repostReel: $repostReel, shareReel: $shareReel, deleteReel: $deleteReel, getShareTargets: $getShareTargets');
+    on<FetchReelsEvent>(_onFetchReels);
+    on<FetchMoreReelsEvent>(_onFetchMoreReels);
+    on<LikeReelEvent>(_onLikeReel);
+    on<RepostReelEvent>(_onRepostReel);
+    on<ShareReelEvent>(_onShareReel);
+    on<ShareReelToChatEvent>(_onShareReelToChat);
+    on<DeleteReelEvent>(_onDeleteReel);
+    on<PauseAllReelsEvent>(_onPauseAllReels);
+    on<GetReelCommentsEvent>(_onGetReelComments);
+    on<AddReelCommentEvent>(_onAddReelComment);
+    on<DeleteReelCommentEvent>(_onDeleteReelComment);
+  }
 
-    on<FetchReelsEvent>((event, emit) async {
-      emit(const ReelsLoading([], true, null));
-      final result = await getReels(Params(nextUrl: null));
-      result.fold(
-        (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
-        (data) {
-          print('DEBUG: Fetched ${data['reels'].length} reels, hasMore: ${data['hasMore']}');
-          emit(ReelsLoaded(
+  void _emitAndCache(Emitter<ReelsState> emit, ReelsActionState state) {
+    _cachedReelsState = state;
+    emit(state);
+  }
+
+  Future<void> _onFetchReels(FetchReelsEvent event, Emitter<ReelsState> emit) async {
+    emit(const ReelsLoading([], true, null));
+    final result = await getReels(const Params(nextUrl: null));
+    result.fold(
+      (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
+      (data) {
+        _emitAndCache(
+          emit,
+          ReelsLoaded(
             List<ReelEntity>.from(data['reels'] as List),
             data['hasMore'] as bool,
             data['nextUrl'] as String?,
-          ));
-        },
-      );
-    });
-
-    on<FetchMoreReelsEvent>((event, emit) async {
-      if (state is ReelsLoaded) {
-        final currentState = state as ReelsLoaded;
-        emit(ReelsLoading(currentState.reels, currentState.hasMore, currentState.nextUrl));
-        final result = await getReels(Params(nextUrl: currentState.nextUrl));
-        result.fold(
-          (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
-          (data) {
-            final updatedReels = [...currentState.reels, ...data['reels'] as List];
-            print('DEBUG: Fetched more reels, total: ${updatedReels.length}');
-            emit(ReelsLoaded(
-              List<ReelEntity>.from(updatedReels),
-              data['hasMore'] as bool,
-              data['nextUrl'] as String?,
-            ));
-          },
+          ),
         );
-      }
-    });
+      },
+    );
+  }
 
-    on<LikeReelEvent>((event, emit) async {
-      if (state is ReelsLoaded) {
-        final currentState = state as ReelsLoaded;
-        final updatedReels = currentState.reels.map((reel) {
-          if (reel.id == event.reelId) {
-            return reel.copyWith(
-              isLiked: event.like,
-              likesCount: event.like ? reel.likesCount + 1 : reel.likesCount - 1,
-            );
-          }
-          return reel;
-        }).toList();
-        emit(ReelsLikeUpdating(updatedReels, currentState.hasMore, currentState.nextUrl));
-        final result = await likeReel(LikeParams(reelId: event.reelId, like: event.like));
-        result.fold(
-          (failure) => emit(ReelsLikeError(
-            message: _mapFailureToMessage(failure),
-            reels: currentState.reels,
-            hasMore: currentState.hasMore,
-            nextUrl: currentState.nextUrl,
-          )),
-          (_) => emit(ReelsLoaded(updatedReels, currentState.hasMore, currentState.nextUrl)),
+  Future<void> _onFetchMoreReels(FetchMoreReelsEvent event, Emitter<ReelsState> emit) async {
+    if (_cachedReelsState == null) return;
+    final current = _cachedReelsState!;
+    _emitAndCache(emit, ReelsLoading(current.reels, current.hasMore, current.nextUrl));
+    final result = await getReels(Params(nextUrl: current.nextUrl));
+    result.fold(
+      (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
+      (data) {
+        final updated = [...current.reels, ...List<ReelEntity>.from(data['reels'] as List)];
+        _emitAndCache(
+          emit,
+          ReelsLoaded(
+            updated,
+            data['hasMore'] as bool,
+            data['nextUrl'] as String?,
+          ),
         );
-      }
-    });
+      },
+    );
+  }
 
-    on<RepostReelEvent>((event, emit) async {
-      if (state is ReelsLoaded) {
-        final currentState = state as ReelsLoaded;
-        final updatedReels = currentState.reels.map((reel) {
-          if (reel.id == event.reelId) {
-            return reel.copyWith(repostCount: reel.repostCount + 1);
-          }
-          return reel;
-        }).toList();
-        emit(ReelsRepostUpdating(updatedReels, currentState.hasMore, currentState.nextUrl));
-        final result = await repostReel(RepostParams(
+  Future<void> _onLikeReel(LikeReelEvent event, Emitter<ReelsState> emit) async {
+    if (_cachedReelsState == null) return;
+    final current = _cachedReelsState!;
+    final original = List<ReelEntity>.from(current.reels);
+
+    final optimistic = current.reels.map((r) {
+      if (r.id == event.reelId) {
+        final nextCount = event.like ? r.likesCount + 1 : (r.likesCount - 1).clamp(0, 1 << 30);
+        return r.copyWith(isLiked: event.like, likesCount: nextCount);
+      }
+      return r;
+    }).toList();
+
+    _emitAndCache(emit, ReelsLikeUpdating(optimistic, current.hasMore, current.nextUrl));
+
+    final res = await likeReel(LikeParams(reelId: event.reelId, like: event.like));
+    res.fold(
+      (failure) => _emitAndCache(
+        emit,
+        ReelsLikeError(
+          message: _mapFailureToMessage(failure),
+          reels: original,
+          hasMore: current.hasMore,
+          nextUrl: current.nextUrl,
+        ),
+      ),
+      (_) => _emitAndCache(emit, ReelsLoaded(optimistic, current.hasMore, current.nextUrl)),
+    );
+  }
+
+  Future<void> _onRepostReel(RepostReelEvent event, Emitter<ReelsState> emit) async {
+    if (_cachedReelsState == null) return;
+    final current = _cachedReelsState!;
+    final optimistic = current.reels.map((r) {
+      if (r.id == event.reelId) return r.copyWith(repostCount: r.repostCount + 1);
+      return r;
+    }).toList();
+
+    _emitAndCache(emit, ReelsRepostUpdating(optimistic, current.hasMore, current.nextUrl));
+
+    final res = await repostReel(RepostParams(
+      reelId: event.reelId,
+      mediaType: event.mediaType,
+      title: event.title,
+      caption: event.caption,
+    ));
+
+    res.fold(
+      (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
+      (_) => _emitAndCache(emit, ReelsLoaded(optimistic, current.hasMore, current.nextUrl)),
+    );
+  }
+
+  Future<void> _onShareReel(ShareReelEvent event, Emitter<ReelsState> emit) async {
+    if (_cachedReelsState == null) return;
+    final current = _cachedReelsState!;
+    final res = await getShareTargets(NoParams());
+    res.fold(
+      (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
+      (targets) => _emitAndCache(
+        emit,
+        ReelsShareTargetsLoaded(
+          reels: current.reels,
+          hasMore: current.hasMore,
+          nextUrl: current.nextUrl,
+          shareTargets: targets,
           reelId: event.reelId,
-          mediaType: event.mediaType,
-          title: event.title,
-          caption: event.caption,
-        ));
-        result.fold(
-          (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
-          (_) => emit(ReelsLoaded(updatedReels, currentState.hasMore, currentState.nextUrl)),
-        );
-      }
-    });
+        ),
+      ),
+    );
+  }
 
-    on<ShareReelEvent>((event, emit) async {
-      if (state is ReelsLoaded) {
-        final currentState = state as ReelsLoaded;
-        final result = await getShareTargets(NoParams());
-        result.fold(
-          (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
-          (targets) => emit(ReelsShareTargetsLoaded(
-            reels: currentState.reels,
-            hasMore: currentState.hasMore,
-            nextUrl: currentState.nextUrl,
-            shareTargets: targets,
-            reelId: event.reelId,
-          )),
-        );
-      }
-    });
+  Future<void> _onShareReelToChat(ShareReelToChatEvent event, Emitter<ReelsState> emit) async {
+    if (_cachedReelsState == null) return;
+    final current = _cachedReelsState!;
+    final shareState = state is ReelsShareTargetsLoaded ? state as ReelsShareTargetsLoaded : null;
+    if (shareState == null) return;
 
-    on<ShareReelToChatEvent>((event, emit) async {
-      if (state is ReelsShareTargetsLoaded) {
-        final currentState = state as ReelsShareTargetsLoaded;
-        final target = currentState.shareTargets.firstWhere(
-          (t) => t.chatId == event.chatId,
-          orElse: () => throw Exception('Target not found'),
-        );
-        final result = await shareReel(ShareReelParams(
-          reelId: event.reelId,
-          chatId: event.chatId,
-          type: target.type,
-        ));
-        result.fold(
-          (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
-          (_) => emit(ReelsLoaded(currentState.reels, currentState.hasMore, currentState.nextUrl)),
-        );
-      }
-    });
+    final tgt = shareState.shareTargets.firstWhere(
+      (t) => t.chatId == event.chatId,
+      orElse: () => throw Exception('Target not found'),
+    );
 
-    on<DeleteReelEvent>((event, emit) async {
-      if (state is ReelsLoaded) {
-        final currentState = state as ReelsLoaded;
-        emit(ReelsLoading(currentState.reels, currentState.hasMore, currentState.nextUrl));
-        final result = await deleteReel(DeleteReelParams(reelId: event.reelId));
-        result.fold(
-          (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
-          (_) {
-            final updatedReels = currentState.reels.where((reel) => reel.id != event.reelId).toList();
-            print('DEBUG: Reel ${event.reelId} deleted, new reel count: ${updatedReels.length}');
-            emit(ReelsLoaded(updatedReels, currentState.hasMore, currentState.nextUrl));
-          },
-        );
-      }
-    });
+    final res = await shareReel(ShareReelParams(reelId: event.reelId, chatId: event.chatId, type: tgt.type));
+    res.fold(
+      (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
+      (_) => _emitAndCache(emit, ReelsLoaded(current.reels, current.hasMore, current.nextUrl)),
+    );
+  }
 
-    on<PauseAllReelsEvent>((event, emit) async {
-      if (state is ReelsLoaded) {
-        final currentState = state as ReelsLoaded;
-        emit(currentState);
-      }
-    });
+  Future<void> _onDeleteReel(DeleteReelEvent event, Emitter<ReelsState> emit) async {
+    if (_cachedReelsState == null) return;
+    final current = _cachedReelsState!;
+    _emitAndCache(emit, ReelsLoading(current.reels, current.hasMore, current.nextUrl));
+
+    final res = await deleteReel(DeleteReelParams(reelId: event.reelId));
+    res.fold(
+      (failure) => emit(ReelsError(message: _mapFailureToMessage(failure))),
+      (_) {
+        final updated = current.reels.where((r) => r.id != event.reelId).toList();
+        _emitAndCache(emit, ReelsLoaded(updated, current.hasMore, current.nextUrl));
+      },
+    );
+  }
+
+  void _onPauseAllReels(PauseAllReelsEvent event, Emitter<ReelsState> emit) {
+    if (_cachedReelsState != null) {
+      _emitAndCache(emit, _cachedReelsState!);
+    }
+  }
+
+  Future<void> _onGetReelComments(GetReelCommentsEvent event, Emitter<ReelsState> emit) async {
+    emit(ReelCommentsLoading());
+    final res = await getComments(GetCommentsParams(postId: event.reelId));
+    res.fold(
+      (failure) => emit(ReelCommentsError(_mapFailureToMessage(failure))),
+      (comments) => emit(ReelCommentsLoaded(comments)),
+    );
+  }
+
+  Future<void> _onAddReelComment(AddReelCommentEvent event, Emitter<ReelsState> emit) async {
+    final res = await addComment(AddCommentParams(postId: event.reelId, content: event.content));
+    res.fold(
+      (failure) => emit(ReelCommentsError(_mapFailureToMessage(failure))),
+      (_) {
+        add(GetReelCommentsEvent(reelId: event.reelId));
+        if (_cachedReelsState != null) {
+          final current = _cachedReelsState!;
+          final updated = current.reels.map((r) {
+            if (r.id == event.reelId) return r.copyWith(commentsCount: r.commentsCount + 1);
+            return r;
+          }).toList();
+          _emitAndCache(emit, ReelsLoaded(updated, current.hasMore, current.nextUrl));
+        }
+      },
+    );
+  }
+
+  Future<void> _onDeleteReelComment(DeleteReelCommentEvent event, Emitter<ReelsState> emit) async {
+    final res = await deleteComment(DeleteCommentParams(commentId: event.commentId));
+    res.fold(
+      (failure) => emit(ReelCommentsError(_mapFailureToMessage(failure))),
+      (_) {
+        add(GetReelCommentsEvent(reelId: event.reelId));
+        if (_cachedReelsState != null) {
+          final current = _cachedReelsState!;
+          final updated = current.reels.map((r) {
+            if (r.id == event.reelId) {
+              final next = r.commentsCount - 1;
+              return r.copyWith(commentsCount: next < 0 ? 0 : next);
+            }
+            return r;
+          }).toList();
+          _emitAndCache(emit, ReelsLoaded(updated, current.hasMore, current.nextUrl));
+        }
+      },
+    );
   }
 
   String _mapFailureToMessage(Failure failure) {

@@ -15,13 +15,15 @@ class ShareTargetModel {
     this.groupName,
   });
 
-  factory ShareTargetModel.fromJson(Map<String, dynamic> json) {
+  factory ShareTargetModel.fromJsonSafe(Map<String, dynamic> json) {
     return ShareTargetModel(
-      type: json['type'] as String,
-      chatId: json['chat_id'] as String?,
-      lastMessageTime: json['last_message_time'] as String?,
-      data: ShareTargetDataModel.fromJson(json['data'] as Map<String, dynamic>),
-      groupName: json['name'] as String?,
+      type: (json['type'] ?? '').toString(),
+      chatId: json['chat_id']?.toString(),
+      lastMessageTime: json['last_message_time']?.toString(),
+      data: ShareTargetDataModel.fromJsonSafe(
+        (json['data'] as Map?)?.cast<String, dynamic>() ?? const {},
+      ),
+      groupName: json['name']?.toString(),
     );
   }
 
@@ -38,8 +40,8 @@ class ShareTargetModel {
 
 class ShareTargetDataModel {
   final String id;
-  final String? username; // Changed to nullable
-  final String? name; // Changed to nullable
+  final String? username;
+  final String? name;
   final String? profileImage;
   final List<ShareTargetParticipantModel>? participants;
 
@@ -51,17 +53,18 @@ class ShareTargetDataModel {
     this.participants,
   });
 
-  factory ShareTargetDataModel.fromJson(Map<String, dynamic> json) {
+  factory ShareTargetDataModel.fromJsonSafe(Map<String, dynamic> json) {
+    final participantsRoot = (json['participants_details'] as Map?)?.cast<String, dynamic>();
+    final receivers = (participantsRoot?['receivers'] as List?) ?? const [];
     return ShareTargetDataModel(
-      id: json['id'] as String,
-      username: json['username'] as String?,
-      name: json['name'] as String?,
-      profileImage: json['profile_image'] as String?,
-      participants: json['participants_details'] != null
-          ? (json['participants_details']['receivers'] as List)
-              .map((e) => ShareTargetParticipantModel.fromJson(e as Map<String, dynamic>))
-              .toList()
-          : null,
+      id: (json['id'] ?? '').toString(),
+      username: json['username']?.toString(),
+      name: json['name']?.toString(),
+      profileImage: json['profile_image']?.toString(),
+      participants: receivers
+          .whereType<Map<String, dynamic>>()
+          .map(ShareTargetParticipantModel.fromJsonSafe)
+          .toList(),
     );
   }
 
@@ -78,8 +81,8 @@ class ShareTargetDataModel {
 
 class ShareTargetParticipantModel {
   final String id;
-  final String? username; // Changed to nullable
-  final String? name; // Changed to nullable
+  final String? username;
+  final String? name;
   final String? profileImage;
 
   ShareTargetParticipantModel({
@@ -89,12 +92,12 @@ class ShareTargetParticipantModel {
     this.profileImage,
   });
 
-  factory ShareTargetParticipantModel.fromJson(Map<String, dynamic> json) {
+  factory ShareTargetParticipantModel.fromJsonSafe(Map<String, dynamic> json) {
     return ShareTargetParticipantModel(
-      id: json['id'] as String,
-      username: json['username'] as String?,
-      name: json['name'] as String?,
-      profileImage: json['profile_image'] as String?,
+      id: (json['id'] ?? '').toString(),
+      username: json['username']?.toString(),
+      name: json['name']?.toString(),
+      profileImage: json['profile_image']?.toString(),
     );
   }
 

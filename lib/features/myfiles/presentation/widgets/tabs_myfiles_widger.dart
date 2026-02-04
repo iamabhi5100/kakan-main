@@ -12,86 +12,61 @@ class TabsMyfilesWidget extends StatelessWidget {
     required this.onTabChanged,
   });
 
-  BoxDecoration _activeDecoration() {
-    return BoxDecoration(
-      color: appTheme.primaryColor,
-      border: Border.all(color: appTheme.primaryColor, width: 2),
-      borderRadius: const BorderRadius.all(Radius.circular(20)),
-    );
-  }
+  Widget _buildTabItem({
+    required BuildContext context,
+    required IconData iconData,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    final Color backgroundColor = isActive ? const Color(0xFF6F42C1) : Colors.grey.shade200;
+    final Color foregroundColor = isActive ? Colors.white : Colors.grey.shade700;
 
-  BoxDecoration _inactiveDecoration() {
-    return BoxDecoration(
-      color: Colors.white,
-      border: Border.all(color: Colors.grey, width: 2),
-      borderRadius: const BorderRadius.all(Radius.circular(20)),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Icon(iconData, color: foregroundColor, size: 20),
+            const Gap(8),
+            Text(
+              label,
+              style: appTheme.textTheme.bodyLarge?.copyWith(
+                color: foregroundColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: () {
-            if (!isVideoActive) {
-              onTabChanged(true);
-            }
-          },
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: isVideoActive ? _activeDecoration() : _inactiveDecoration(),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.video_collection_outlined,
-                  color: isVideoActive ? Colors.white : Colors.grey,
-                  size: 20,
-                ),
-                const Gap(10),
-                Text(
-                  'Videos',
-                  style: appTheme.textTheme.titleLarge?.copyWith(
-                    color: isVideoActive ? Colors.white : Colors.grey,
-                    fontSize: 18,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        _buildTabItem(
+          context: context,
+          iconData: Icons.video_library_outlined,
+          label: 'Videos',
+          isActive: isVideoActive,
+          onTap: () => onTabChanged(true),
         ),
-        const Gap(20),
-        InkWell(
-          onTap: () {
-            if (isVideoActive) {
-              onTabChanged(false);
-            }
-          },
-          child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: !isVideoActive ? _activeDecoration() : _inactiveDecoration(),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.music_note,
-                  color: !isVideoActive ? Colors.white : Colors.grey,
-                  size: 20,
-                ),
-                const Gap(10),
-                Text(
-                  'Songs',
-                  style: appTheme.textTheme.titleLarge?.copyWith(
-                    color: !isVideoActive ? Colors.white : Colors.grey,
-                    fontSize: 18,
-                  ),
-                ),
-              ],
-            ),
-          ),
+        const Gap(12),
+        _buildTabItem(
+          context: context,
+          iconData: Icons.music_note_outlined,
+          label: 'Songs',
+          isActive: !isVideoActive,
+          onTap: () => onTabChanged(false),
         ),
       ],
     );

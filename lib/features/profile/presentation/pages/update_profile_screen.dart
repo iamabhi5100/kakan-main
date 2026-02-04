@@ -15,8 +15,9 @@ import 'package:kakan/features/profile/presentation/bloc/profile_submit/profile_
 import 'package:kakan/features/profile/presentation/bloc/profile_submit/profile_submit_event.dart';
 import 'package:kakan/features/profile/presentation/bloc/profile_submit/profile_submit_state.dart';
 import 'package:kakan/injection_container.dart' as di;
-import 'package:toastification/toastification.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:io';
+import 'package:go_router/go_router.dart';
 
 class UpdateProfileScreen extends StatefulWidget {
   const UpdateProfileScreen({super.key});
@@ -33,10 +34,8 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
   final TextEditingController _dateOfBirthController = TextEditingController();
 
   String _selectedGender = "Male";
-  String _selectedTitle = "Mr.";
   String _selectedOccupation = "Student";
   final List<String> _genderOptions = ["Male", "Female", "Other"];
-  final List<String> _titleOptions = ["Mr.", "Ms.", "Mrs.", "Dr."];
   final List<String> _occupationOptions = ["Student", "Professional", "Other"];
   String? _usernameError;
   File? _selectedImage;
@@ -100,18 +99,19 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
     }
     try {
       final sessionManager = di.sl<SessionManager>();
-      final userId = await sessionManager.getUserId();
+      final userId = await sessionManager.getProfileId();
       if (userId == null) {
         if (mounted) {
           if (kDebugMode) {
             print('UpdateProfileScreen: User ID is null');
           }
-          toastification.show(
-            context: context,
-            title: Text('User ID not found. Please log in again.'),
-            type: ToastificationType.error,
-            style: ToastificationStyle.fillColored,
-            autoCloseDuration: const Duration(seconds: 3),
+          Fluttertoast.showToast(
+            msg: 'User ID not found. Please log in again.',
+            toastLength: Toast.LENGTH_LONG,
+            gravity: ToastGravity.TOP,
+            backgroundColor: Colors.red,
+            textColor: Colors.white,
+            fontSize: 16.0,
           );
           Navigator.pushReplacementNamed(context, '/login');
         }
@@ -127,12 +127,13 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
           print('UpdateProfileScreen: Error in _fetchUserDetails: $e');
           print('Stack trace: $stackTrace');
         }
-        toastification.show(
-          context: context,
-          title: Text('Error fetching user details: $e'),
-          type: ToastificationType.error,
-          style: ToastificationStyle.fillColored,
-          autoCloseDuration: const Duration(seconds: 3),
+        Fluttertoast.showToast(
+          msg: 'Error fetching user details: $e',
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.TOP,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+          fontSize: 16.0,
         );
       }
     }
@@ -212,18 +213,19 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
           _profileImageUrl = null;
         });
         final sessionManager = di.sl<SessionManager>();
-        final userId = await sessionManager.getUserId();
+        final userId = await sessionManager.getProfileId();
         if (userId == null) {
           if (mounted) {
             if (kDebugMode) {
               print('UpdateProfileScreen: User ID is null in _pickImage');
             }
-            toastification.show(
-              context: context,
-              title: Text('User ID not found. Please complete your profile first.'),
-              type: ToastificationType.error,
-              style: ToastificationStyle.fillColored,
-              autoCloseDuration: const Duration(seconds: 3),
+            Fluttertoast.showToast(
+              msg: 'User ID not found. Please complete your profile first.',
+              toastLength: Toast.LENGTH_LONG,
+              gravity: ToastGravity.TOP,
+              backgroundColor: Colors.red,
+              textColor: Colors.white,
+              fontSize: 16.0,
             );
             Navigator.pushReplacementNamed(context, '/onboarding-form');
           }
@@ -245,12 +247,13 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
           print('UpdateProfileScreen: Error in _pickImage: $e');
           print('Stack trace: $stackTrace');
         }
-        toastification.show(
-          context: context,
-          title: Text('Error picking image: $e'),
-          type: ToastificationType.error,
-          style: ToastificationStyle.fillColored,
-          autoCloseDuration: const Duration(seconds: 3),
+        Fluttertoast.showToast(
+          msg: 'Error picking image: $e',
+          toastLength: Toast.LENGTH_LONG,
+          gravity: ToastGravity.TOP,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+          fontSize: 16.0,
         );
       }
     }
@@ -260,8 +263,10 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
     final emailPattern = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
     return _usernameError == null &&
         _fullNameController.text.isNotEmpty &&
+        _dateOfBirthController.text.isNotEmpty &&
+        _selectedOccupation.isNotEmpty &&
         (_emailController.text.isEmpty || emailPattern.hasMatch(_emailController.text)) &&
-        (_dateOfBirthController.text.isEmpty || _dateOfBirthController.text.contains(RegExp(r'^\d{1,2}/\d{1,2}/\d{4}$')));
+        _dateOfBirthController.text.contains(RegExp(r'^\d{1,2}/\d{1,2}/\d{4}$'));
   }
 
   @override
@@ -298,7 +303,12 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                   if (kDebugMode) {
                     print('UpdateProfileScreen: Back button pressed');
                   }
-                  Navigator.pop(context);
+                  // NEW: Check if can pop; if not, navigate to /home
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  } else {
+                    context.go('/home');
+                  }
                 },
               ),
               title: const Text('Edit Profile'),
@@ -339,10 +349,6 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                       _dateOfBirthController.text = _formatDateForDisplay(detailsState.profileDetails.dateOfBirth);
                       needsUpdate = true;
                     }
-                    String newTitle = detailsState.profileDetails.title?.isNotEmpty == true &&
-                            _titleOptions.contains(detailsState.profileDetails.title)
-                        ? detailsState.profileDetails.title!
-                        : _titleOptions.first;
                     String newGender = detailsState.profileDetails.gender?.isNotEmpty == true &&
                             _genderOptions.contains(detailsState.profileDetails.gender)
                         ? detailsState.profileDetails.gender!
@@ -351,8 +357,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                             _occupationOptions.contains(detailsState.profileDetails.occupation)
                         ? detailsState.profileDetails.occupation!
                         : _occupationOptions.first;
-                    if (_selectedTitle != newTitle || _selectedGender != newGender || _selectedOccupation != newOccupation) {
-                      _selectedTitle = newTitle;
+                    if (_selectedGender != newGender || _selectedOccupation != newOccupation) {
                       _selectedGender = newGender;
                       _selectedOccupation = newOccupation;
                       needsUpdate = true;
@@ -377,12 +382,13 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                       print('UpdateProfileScreen: ProfiledetailsError: ${detailsState.message}');
                     }
                     if (mounted) {
-                      toastification.show(
-                        context: context,
-                        title: Text('Error: ${detailsState.message}'),
-                        type: ToastificationType.error,
-                        style: ToastificationStyle.fillColored,
-                        autoCloseDuration: const Duration(seconds: 3),
+                      Fluttertoast.showToast(
+                        msg: 'Error: ${detailsState.message}',
+                        toastLength: Toast.LENGTH_LONG,
+                        gravity: ToastGravity.TOP,
+                        backgroundColor: Colors.red,
+                        textColor: Colors.white,
+                        fontSize: 16.0,
                       );
                     }
                   }
@@ -392,12 +398,13 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                     print('Stack trace: $stackTrace');
                   }
                   if (mounted) {
-                    toastification.show(
-                      context: context,
-                      title: Text('Unexpected error in profile listener: $e'),
-                      type: ToastificationType.error,
-                      style: ToastificationStyle.fillColored,
-                      autoCloseDuration: const Duration(seconds: 3),
+                    Fluttertoast.showToast(
+                      msg: 'Unexpected error in profile listener: $e',
+                      toastLength: Toast.LENGTH_LONG,
+                      gravity: ToastGravity.TOP,
+                      backgroundColor: Colors.red,
+                      textColor: Colors.white,
+                      fontSize: 16.0,
                     );
                   }
                 }
@@ -413,13 +420,18 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                         print('UpdateProfileScreen: ProfileimageUploaded: ${imageState.message}');
                       }
                       if (mounted) {
-                        toastification.show(
-                          context: context,
-                          title: Text(imageState.message),
-                          type: ToastificationType.success,
-                          style: ToastificationStyle.fillColored,
-                          autoCloseDuration: const Duration(seconds: 3),
+                        Fluttertoast.showToast(
+                          msg: imageState.message,
+                          toastLength: Toast.LENGTH_SHORT,
+                          gravity: ToastGravity.TOP,
+                          backgroundColor: Colors.green,
+                          textColor: Colors.white,
+                          fontSize: 16.0,
                         );
+                        setState(() {
+                          _selectedImage = null;
+                          _profileImageUrl = null;
+                        });
                         _fetchUserDetails(blocContext);
                       }
                     } else if (imageState is ProfileimageError) {
@@ -427,12 +439,13 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                         print('UpdateProfileScreen: ProfileimageError: ${imageState.message}');
                       }
                       if (mounted) {
-                        toastification.show(
-                          context: context,
-                          title: Text(imageState.message),
-                          type: ToastificationType.error,
-                          style: ToastificationStyle.fillColored,
-                          autoCloseDuration: const Duration(seconds: 3),
+                        Fluttertoast.showToast(
+                          msg: imageState.message,
+                          toastLength: Toast.LENGTH_LONG,
+                          gravity: ToastGravity.TOP,
+                          backgroundColor: Colors.red,
+                          textColor: Colors.white,
+                          fontSize: 16.0,
                         );
                         if (imageState.message.contains('No UserProfile matches')) {
                           Navigator.pushReplacementNamed(context, '/onboarding-form');
@@ -445,12 +458,13 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                       print('Stack trace: $stackTrace');
                     }
                     if (mounted) {
-                      toastification.show(
-                        context: context,
-                        title: Text('Unexpected error in image listener: $e'),
-                        type: ToastificationType.error,
-                        style: ToastificationStyle.fillColored,
-                        autoCloseDuration: const Duration(seconds: 3),
+                      Fluttertoast.showToast(
+                        msg: 'Unexpected error in image listener: $e',
+                        toastLength: Toast.LENGTH_LONG,
+                        gravity: ToastGravity.TOP,
+                        backgroundColor: Colors.red,
+                        textColor: Colors.white,
+                        fontSize: 16.0,
                       );
                     }
                   }
@@ -476,7 +490,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                               isFollowed: currentResponse.userDetails?.isFollowed ?? false,
                               followersCount: submitState.profileDetails.followersCount,
                               followingCount: submitState.profileDetails.followingCount,
-                              showUpdateProfileCard: false, // Set to false as per API response
+                              showUpdateProfileCard: false,
                               created: currentResponse.userDetails?.created ?? '',
                               modified: currentResponse.userDetails?.modified ?? '',
                               internalCode: currentResponse.userDetails?.internalCode ?? '',
@@ -506,27 +520,60 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                               print('UpdateProfileScreen: Updated VerifyOtpResponse with showUpdateProfileCard: false');
                             }
                           }
-                          toastification.show(
-                            context: context,
-                            title: const Text("Profile updated successfully!"),
-                            type: ToastificationType.success,
-                            style: ToastificationStyle.fillColored,
-                            autoCloseDuration: const Duration(seconds: 3),
+                          Fluttertoast.showToast(
+                            msg: 'Profile updated successfully!',
+                            toastLength: Toast.LENGTH_SHORT,
+                            gravity: ToastGravity.TOP,
+                            backgroundColor: Colors.green,
+                            textColor: Colors.white,
+                            fontSize: 16.0,
                           );
-                          _fetchUserDetails(blocContext);
-                          Navigator.pop(context);
+                          if (kDebugMode) {
+                            final accessToken = await sessionManager.getAccessToken();
+                            print('UpdateProfileScreen: Access token before navigation: $accessToken');
+                            print('UpdateProfileScreen: Attempting to navigate to /home');
+                          }
+                          try {
+                            await _fetchUserDetails(context);
+                            // Try GoRouter navigation
+                            context.go('/home');
+                            if (kDebugMode) {
+                              print('UpdateProfileScreen: GoRouter navigation to /home executed');
+                            }
+                          } catch (e, stackTrace) {
+                            if (kDebugMode) {
+                              print('UpdateProfileScreen: GoRouter navigation error: $e');
+                              print('Stack trace: $stackTrace');
+                            }
+                            Fluttertoast.showToast(
+                              msg: 'GoRouter navigation failed: $e. Falling back to Navigator.',
+                              toastLength: Toast.LENGTH_LONG,
+                              gravity: ToastGravity.TOP,
+                              backgroundColor: Colors.red,
+                              textColor: Colors.white,
+                              fontSize: 16.0,
+                            );
+                            // Fallback to Navigator
+                            if (mounted) {
+                              Navigator.pushReplacementNamed(context, '/home');
+                              if (kDebugMode) {
+                                print('UpdateProfileScreen: Navigator navigation to /home executed');
+                              }
+                            }
+                          }
                         }
                       } else if (submitState is ProfileSubmitError) {
                         if (kDebugMode) {
                           print('UpdateProfileScreen: ProfileSubmitError: ${submitState.message}');
                         }
                         if (mounted) {
-                          toastification.show(
-                            context: context,
-                            title: Text(submitState.message),
-                            type: ToastificationType.error,
-                            style: ToastificationStyle.fillColored,
-                            autoCloseDuration: const Duration(seconds: 3),
+                          Fluttertoast.showToast(
+                            msg: submitState.message,
+                            toastLength: Toast.LENGTH_LONG,
+                            gravity: ToastGravity.TOP,
+                            backgroundColor: Colors.red,
+                            textColor: Colors.white,
+                            fontSize: 16.0,
                           );
                         }
                       }
@@ -536,12 +583,13 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                         print('Stack trace: $stackTrace');
                       }
                       if (mounted) {
-                        toastification.show(
-                          context: context,
-                          title: Text('Unexpected error in profile submit listener: $e'),
-                          type: ToastificationType.error,
-                          style: ToastificationStyle.fillColored,
-                          autoCloseDuration: const Duration(seconds: 3),
+                        Fluttertoast.showToast(
+                          msg: 'Unexpected error in profile submit listener: $e',
+                          toastLength: Toast.LENGTH_LONG,
+                          gravity: ToastGravity.TOP,
+                          backgroundColor: Colors.red,
+                          textColor: Colors.white,
+                          fontSize: 16.0,
                         );
                       }
                     }
@@ -591,13 +639,8 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                                               ? FileImage(_selectedImage!)
                                               : _profileImageUrl != null && _profileImageUrl!.isNotEmpty
                                                   ? NetworkImage(_profileImageUrl!)
-                                                  : const NetworkImage('https://picsum.photos/200') as ImageProvider,
+                                                  : const AssetImage('assets/images/avataruser.png') as ImageProvider,
                                           backgroundColor: Colors.grey,
-                                          onBackgroundImageError: (exception, stackTrace) {
-                                            if (kDebugMode) {
-                                              print('UpdateProfileScreen: Error loading profile image: $exception');
-                                            }
-                                          },
                                         ),
                                         Positioned(
                                           bottom: 0,
@@ -637,12 +680,9 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                             TextField(
                               key: const ValueKey('username'),
                               controller: _usernameController,
-                              onChanged: _validateUsername,
-                              decoration: InputDecoration(
-                                border: const OutlineInputBorder(),
-                                errorText: _usernameError,
-                                errorStyle: const TextStyle(color: Colors.red),
-                                suffixIcon: const Icon(Icons.refresh, color: Colors.grey),
+                              enabled: false,
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
                                 hintText: 'Enter username',
                               ),
                             ),
@@ -666,72 +706,35 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                               key: const ValueKey('email'),
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
+                              enabled: false,
                               decoration: const InputDecoration(
                                 border: OutlineInputBorder(),
-                                hintText: 'Enter email',
+                                hintText: 'Email',
                               ),
                             ),
                             if (kDebugMode) Text('Debug: ${_emailController.text}'),
                             const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text("Title", style: TextStyle(fontSize: 16)),
-                                      DropdownButtonFormField<String>(
-                                        key: const ValueKey('title'),
-                                        value: _selectedTitle,
-                                        items: _titleOptions.map((String value) {
-                                          return DropdownMenuItem<String>(
-                                            value: value,
-                                            child: Text(value),
-                                          );
-                                        }).toList(),
-                                        onChanged: (newValue) {
-                                          setState(() {
-                                            _selectedTitle = newValue!;
-                                          });
-                                        },
-                                        decoration: const InputDecoration(
-                                          border: OutlineInputBorder(),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text("Gender", style: TextStyle(fontSize: 16)),
-                                      DropdownButtonFormField<String>(
-                                        key: const ValueKey('gender'),
-                                        value: _selectedGender,
-                                        items: _genderOptions.map((String value) {
-                                          return DropdownMenuItem<String>(
-                                            value: value,
-                                            child: Text(value),
-                                          );
-                                        }).toList(),
-                                        onChanged: (newValue) {
-                                          setState(() {
-                                            _selectedGender = newValue!;
-                                          });
-                                        },
-                                        decoration: const InputDecoration(
-                                          border: OutlineInputBorder(),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+                            const Text("Gender", style: TextStyle(fontSize: 16)),
+                            DropdownButtonFormField<String>(
+                              key: const ValueKey('gender'),
+                              value: _selectedGender,
+                              items: _genderOptions.map((String value) {
+                                return DropdownMenuItem<String>(
+                                  value: value,
+                                  child: Text(value),
+                                );
+                              }).toList(),
+                              onChanged: (newValue) {
+                                setState(() {
+                                  _selectedGender = newValue!;
+                                });
+                              },
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
+                              ),
                             ),
                             const SizedBox(height: 16),
-                            const Text("Date of Birth", style: TextStyle(fontSize: 16)),
+                            const Text("Date of Birth*", style: TextStyle(fontSize: 16)),
                             TextField(
                               key: const ValueKey('date_of_birth'),
                               controller: _dateOfBirthController,
@@ -745,7 +748,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                             ),
                             if (kDebugMode) Text('Debug: ${_dateOfBirthController.text}'),
                             const SizedBox(height: 16),
-                            const Text("What best describes you", style: TextStyle(fontSize: 16)),
+                            const Text("What best describes you*", style: TextStyle(fontSize: 16)),
                             DropdownButtonFormField<String>(
                               key: const ValueKey('occupation'),
                               value: _selectedOccupation,
@@ -767,6 +770,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                             const SizedBox(height: 20),
                             SizedBox(
                               width: double.infinity,
+                              height: 50,
                               child: ElevatedButton(
                                 onPressed: _isFormValid()
                                     ? () async {
@@ -775,18 +779,19 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                                         }
                                         try {
                                           final sessionManager = di.sl<SessionManager>();
-                                          final userId = await sessionManager.getUserId();
+                                          final userId = await sessionManager.getProfileId();
                                           if (userId == null) {
                                             if (mounted) {
                                               if (kDebugMode) {
                                                 print('UpdateProfileScreen: User ID is null in Save Changes');
                                               }
-                                              toastification.show(
-                                                context: context,
-                                                title: Text('User ID not found. Please log in again.'),
-                                                type: ToastificationType.error,
-                                                style: ToastificationStyle.fillColored,
-                                                autoCloseDuration: const Duration(seconds: 3),
+                                              Fluttertoast.showToast(
+                                                msg: 'User ID not found. Please log in again.',
+                                                toastLength: Toast.LENGTH_LONG,
+                                                gravity: ToastGravity.TOP,
+                                                backgroundColor: Colors.red,
+                                                textColor: Colors.white,
+                                                fontSize: 16.0,
                                               );
                                               Navigator.pushReplacementNamed(context, '/login');
                                             }
@@ -797,7 +802,6 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                                             'name': _fullNameController.text,
                                             'email': _emailController.text,
                                             'date_of_birth': _formatDateForApi(_dateOfBirthController.text),
-                                            'title': _selectedTitle,
                                             'gender': _selectedGender,
                                             'occupation': _selectedOccupation,
                                           };
@@ -813,24 +817,32 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                                               print('UpdateProfileScreen: Error in Save Changes: $e');
                                               print('Stack trace: $stackTrace');
                                             }
-                                            toastification.show(
-                                              context: context,
-                                              title: Text('Error saving changes: $e'),
-                                              type: ToastificationType.error,
-                                              style: ToastificationStyle.fillColored,
-                                              autoCloseDuration: const Duration(seconds: 3),
+                                            Fluttertoast.showToast(
+                                              msg: 'Error saving changes: $e',
+                                              toastLength: Toast.LENGTH_LONG,
+                                              gravity: ToastGravity.TOP,
+                                              backgroundColor: Colors.red,
+                                              textColor: Colors.white,
+                                              fontSize: 16.0,
                                             );
                                           }
                                         }
                                       }
                                     : null,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue[800],
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  backgroundColor: Colors.black,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 2,
                                 ),
-                                child: const Text(
+                                child: Text(
                                   "SAVE CHANGES",
-                                  style: TextStyle(color: Colors.white, fontSize: 16),
+                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                 ),
                               ),
                             ),
@@ -838,13 +850,13 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                         ),
                       );
                     },
-
                   ),
                 ),
               ),
             ),
           );
         },
-    ));
+      ),
+    );
   }
 }

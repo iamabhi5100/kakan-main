@@ -1,5 +1,5 @@
 // lib/features/youtube/presentation/bloc/youtube_state.dart
-import 'package:kakan/features/youtube/domain/entities/video_entity.dart';
+import 'package:kakan/features/youtube/model/youtube_home_model.dart';
 
 abstract class YoutubeState {}
 
@@ -8,10 +8,10 @@ class YoutubeInitial extends YoutubeState {}
 class YoutubeLoading extends YoutubeState {}
 
 class YoutubeLoaded extends YoutubeState {
-  final List<VideoEntity> videos;
+  final List<Content> contents;
   final bool isSearchResult;
 
-  YoutubeLoaded({required this.videos, required this.isSearchResult});
+  YoutubeLoaded({required this.contents, required this.isSearchResult});
 }
 
 class YoutubeDownloading extends YoutubeState {

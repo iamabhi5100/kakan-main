@@ -10,6 +10,10 @@ class ReelModel {
   final String mediaFile;
   final String? thumbnail;
   final String privacy;
+  final int likesCount;
+  final int repostCount;
+  final int commentsCount;
+  final bool flagLiked;
 
   ReelModel({
     required this.id,
@@ -19,21 +23,31 @@ class ReelModel {
     required this.title,
     required this.caption,
     required this.mediaFile,
-    this.thumbnail,
+    required this.thumbnail,
     required this.privacy,
+    required this.likesCount,
+    required this.repostCount,
+    required this.commentsCount,
+    required this.flagLiked,
   });
 
-  factory ReelModel.fromJson(Map<String, dynamic> json) {
+  /// Null-safe constructor (DO NOT use strict `as String`)
+  factory ReelModel.fromJsonSafe(Map<String, dynamic> json) {
+    final up = (json['user_profile_details'] as Map?)?.cast<String, dynamic>() ?? const {};
     return ReelModel(
-      id: json['id'] as String,
-      userProfileDetails: UserProfileDetailsModel.fromJson(json['user_profile_details'] as Map<String, dynamic>),
-      created: json['created'] as String,
-      mediaType: json['media_type'] as String,
-      title: json['title'] as String,
-      caption: json['caption'] as String? ?? '',
-      mediaFile: json['media_file'] as String,
-      thumbnail: json['thumbnail'] as String?,
-      privacy: json['privacy'] as String,
+      id: (json['id'] ?? '').toString(),
+      userProfileDetails: UserProfileDetailsModel.fromJsonSafe(up),
+      created: (json['created'] ?? '').toString(),
+      mediaType: (json['media_type'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      caption: (json['caption'] ?? '').toString(),
+      mediaFile: (json['media_file'] ?? '').toString(),
+      thumbnail: json['thumbnail'] == null ? null : json['thumbnail'].toString(),
+      privacy: (json['privacy'] ?? '').toString(),
+      likesCount: _safeInt(json['likes_count']),
+      repostCount: _safeInt(json['repost_count']),
+      commentsCount: _safeInt(json['comments_count']),
+      flagLiked: (json['flag_liked'] is bool) ? json['flag_liked'] as bool : false,
     );
   }
 
@@ -48,7 +62,18 @@ class ReelModel {
       mediaFile: mediaFile,
       thumbnail: thumbnail,
       privacy: privacy,
+      isLiked: flagLiked,
+      likesCount: likesCount,
+      repostCount: repostCount,
+      commentsCount: commentsCount,
     );
+  }
+
+  static int _safeInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is String) return int.tryParse(v) ?? 0;
+    return 0;
   }
 }
 
@@ -56,7 +81,7 @@ class UserProfileDetailsModel {
   final String id;
   final String username;
   final String name;
-  final String profileImage;
+  final String profileImage; // keep non-null for entity
 
   UserProfileDetailsModel({
     required this.id,
@@ -65,12 +90,12 @@ class UserProfileDetailsModel {
     required this.profileImage,
   });
 
-  factory UserProfileDetailsModel.fromJson(Map<String, dynamic> json) {
+  factory UserProfileDetailsModel.fromJsonSafe(Map<String, dynamic> json) {
     return UserProfileDetailsModel(
-      id: json['id'] as String,
-      username: json['username'] as String,
-      name: json['name'] as String,
-      profileImage: json['profile_image'] as String? ?? '',
+      id: (json['id'] ?? '').toString(),
+      username: (json['username'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      profileImage: (json['profile_image'] ?? '').toString(),
     );
   }
 
@@ -81,5 +106,5 @@ class UserProfileDetailsModel {
       name: name,
       profileImage: profileImage,
     );
-  }
+    }
 }

@@ -10,9 +10,10 @@ import 'package:toastification/toastification.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
 
 class ShareScreen extends StatefulWidget {
-  final String? mediaFile;
+  final String? mediaFile; // Can be a URL or local file path
   final String? mediaType;
   final String? caption;
 
@@ -96,12 +97,11 @@ class _ShareScreenState extends State<ShareScreen> {
 
   void _handleSend() async {
     if (_selectedItems.isNotEmpty) {
-      // Show full-screen loading dialog
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => WillPopScope(
-          onWillPop: () async => false, // Prevent dialog dismissal
+          onWillPop: () async => false,
           child: const Dialog(
             backgroundColor: Colors.transparent,
             child: Center(
@@ -121,7 +121,7 @@ class _ShareScreenState extends State<ShareScreen> {
 
       bool hasError = false;
       for (final item in selected) {
-        if (item.chatId == null) continue; // Skip if no chatId
+        if (item.chatId == null) continue;
         print('DEBUG: Sending message to ${item.type == 'user' ? item.data.name : item.name}');
         final result = await sendMessage(SendShareMessageParams(
           chatId: item.chatId!,
@@ -130,7 +130,7 @@ class _ShareScreenState extends State<ShareScreen> {
           messageType: messageType,
           mediaFileUrl: widget.mediaFile,
         ));
-        if (!mounted) return; // Check if widget is still mounted
+        if (!mounted) return;
         result.fold(
           (failure) {
             hasError = true;
@@ -159,16 +159,14 @@ class _ShareScreenState extends State<ShareScreen> {
       }
 
       if (mounted) {
-        // Dismiss full-screen loading dialog
         Navigator.of(context, rootNavigator: true).pop();
         if (!hasError) {
-          Navigator.pop(context); // Close bottom sheet
+          Navigator.pop(context);
         }
       }
     }
   }
 
-  // Share to external apps
   Future<void> _shareExternally() async {
     if (widget.mediaFile == null || widget.mediaFile!.isEmpty) {
       if (mounted) {
@@ -185,11 +183,22 @@ class _ShareScreenState extends State<ShareScreen> {
 
     final String message = 'Check out this post: ${widget.mediaFile}\nCaption: ${widget.caption ?? 'No caption'}';
     try {
-      await Share.share(
-        message,
-        subject: 'Shared Post',
-        sharePositionOrigin: Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width, MediaQuery.of(context).size.height / 2),
-      );
+      // Check if mediaFile is a local file path
+      final isLocalFile = File(widget.mediaFile!).existsSync();
+      if (isLocalFile) {
+        await Share.shareXFiles(
+          [XFile(widget.mediaFile!)],
+          text: message,
+          subject: 'Shared Post',
+          sharePositionOrigin: Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width, MediaQuery.of(context).size.height / 2),
+        );
+      } else {
+        await Share.share(
+          message,
+          subject: 'Shared Post',
+          sharePositionOrigin: Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width, MediaQuery.of(context).size.height / 2),
+        );
+      }
       if (mounted) {
         toastification.show(
           context: context,
@@ -214,7 +223,6 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
-  // Copy link to clipboard
   Future<void> _copyLink() async {
     if (widget.mediaFile == null || widget.mediaFile!.isEmpty) {
       if (mounted) {

@@ -18,11 +18,13 @@ class DownloadsBloc extends Bloc<DownloadsEvent, DownloadsState> {
     Emitter<DownloadsState> emit,
   ) async {
     if (kDebugMode) {
-      print('DownloadsBloc: Fetching downloads for mediaType: ${event.mediaType}');
+      print('DownloadsBloc: Fetching downloads for mediaType: ${event.mediaType}, search: ${event.search}');
     }
     try {
       emit(DownloadsLoading());
-      final result = await getDownloads(event.mediaType);
+      final result = await getDownloads(
+        GetDownloadsParams(mediaType: event.mediaType, search: event.search),
+      );
       result.fold(
         (failure) {
           if (kDebugMode) {

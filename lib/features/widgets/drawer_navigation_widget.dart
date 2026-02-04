@@ -48,7 +48,7 @@ class DrawerNavigationWidget extends StatelessWidget {
       );
 
       // Pause media
-      MediaManager().pauseMedia();
+      MediaManager().pauseAll();
 
       // Clear all stored data from SessionManager
       final sessionManager = di.sl<SessionManager>();

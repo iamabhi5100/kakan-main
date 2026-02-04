@@ -9,6 +9,12 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    # Patched video_player_android: example and pigeons need their own deps; exclude from root analysis
+    - packages/video_player_android/example/**
+    - packages/video_player_android/pigeons/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

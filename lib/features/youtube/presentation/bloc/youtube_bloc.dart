@@ -1,7 +1,11 @@
+// lib/features/youtube/presentation/bloc/youtube_bloc.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:kakan/core/usecases/usecase.dart';
+import 'package:kakan/features/youtube/domain/usecases/fetch_home_videos.dart';
 import 'package:kakan/features/youtube/domain/usecases/search_videos.dart';
 import 'package:kakan/features/youtube/domain/usecases/download_video.dart';
+import 'package:kakan/features/youtube/model/video.dart';
 import 'package:kakan/features/youtube/presentation/bloc/youtube_event.dart';
 import 'package:kakan/features/youtube/presentation/bloc/youtube_state.dart';
 import 'package:kakan/core/error/exceptions.dart';
@@ -9,10 +13,12 @@ import 'package:kakan/core/error/failures.dart';
 
 class YoutubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
   final SearchVideos searchVideos;
+  final FetchHomeVideos fetchHomeVideos;
   final DownloadVideo downloadVideo;
 
   YoutubeBloc({
     required this.searchVideos,
+    required this.fetchHomeVideos,
     required this.downloadVideo,
   }) : super(YoutubeInitial()) {
     on<SearchVideosEvent>(
@@ -41,20 +47,20 @@ class YoutubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
         final message = _extractMessage(failure);
         emit(YoutubeError(message));
       },
-      (videos) => emit(YoutubeLoaded(videos: videos, isSearchResult: true)),
+      (contents) => emit(YoutubeLoaded(contents: contents, isSearchResult: true)),
     );
   }
 
   Future<void> _onFetchHomeVideos(
       FetchHomeVideosEvent event, Emitter<YoutubeState> emit) async {
     emit(YoutubeLoading());
-    final result = await searchVideos('trending');
+    final result = await fetchHomeVideos(NoParams());
     result.fold(
       (failure) {
         final message = _extractMessage(failure);
         emit(YoutubeError(message));
       },
-      (videos) => emit(YoutubeLoaded(videos: videos, isSearchResult: false)),
+      (response) => emit(YoutubeLoaded(contents: response.contents, isSearchResult: false)),
     );
   }
 
@@ -92,7 +98,6 @@ class YoutubeBloc extends Bloc<YoutubeEvent, YoutubeState> {
     );
   }
 
-  /// Helper to unwrap the message from a Failure.
   String _extractMessage(Failure failure) {
     if (failure is ServerFailure && failure.exception is ServerException) {
       return (failure.exception as ServerException).message ?? 'Unknown server error';

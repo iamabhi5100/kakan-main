@@ -13,6 +13,7 @@ class ReelEntity extends Equatable {
   final bool isLiked;
   final int likesCount;
   final int repostCount;
+  final int commentsCount;
 
   const ReelEntity({
     required this.id,
@@ -27,6 +28,7 @@ class ReelEntity extends Equatable {
     this.isLiked = false,
     this.likesCount = 0,
     this.repostCount = 0,
+    this.commentsCount = 0,
   });
 
   ReelEntity copyWith({
@@ -42,6 +44,7 @@ class ReelEntity extends Equatable {
     bool? isLiked,
     int? likesCount,
     int? repostCount,
+    int? commentsCount,
   }) {
     return ReelEntity(
       id: id ?? this.id,
@@ -56,6 +59,7 @@ class ReelEntity extends Equatable {
       isLiked: isLiked ?? this.isLiked,
       likesCount: likesCount ?? this.likesCount,
       repostCount: repostCount ?? this.repostCount,
+      commentsCount: commentsCount ?? this.commentsCount,
     );
   }
 
@@ -73,6 +77,7 @@ class ReelEntity extends Equatable {
         isLiked,
         likesCount,
         repostCount,
+        commentsCount,
       ];
 }
 

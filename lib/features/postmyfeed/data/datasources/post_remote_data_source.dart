@@ -60,8 +60,9 @@ class PostRemoteDataSourceImpl implements PostRemoteDataSource {
   }) async {
     try {
       String? localMediaPath = mediaFilePath;
-      if (mediaId == null && mediaFilePath != null && mediaFilePath.startsWith('http')) {
-        print('DEBUG: mediaId is null, downloading video from $mediaFilePath');
+      // If mediaId is provided and mediaFilePath is a URL, download the file
+      if (mediaFilePath != null && mediaFilePath.startsWith('http')) {
+        print('DEBUG: Downloading media file from $mediaFilePath');
         localMediaPath = await _downloadFile(mediaFilePath);
       }
 
@@ -70,8 +71,11 @@ class PostRemoteDataSourceImpl implements PostRemoteDataSource {
         'title': title,
         if (caption != null) 'caption': caption,
         if (mediaId != null) 'media_id': mediaId,
-        if (localMediaPath != null && (mediaId == null || !localMediaPath.startsWith('http')))
-          'media_file': await MultipartFile.fromFile(localMediaPath),
+        if (localMediaPath != null)
+          'media_file': await MultipartFile.fromFile(
+            localMediaPath,
+            filename: localMediaPath.split('/').last,
+          ),
         if (thumbnailPath != null)
           'thumbnail': await MultipartFile.fromFile(thumbnailPath),
         'share_to': shareTo,
@@ -92,6 +96,7 @@ class PostRemoteDataSourceImpl implements PostRemoteDataSource {
         throw ServerException(message: 'Invalid response format');
       }
     } catch (e) {
+      print('DEBUG: Error in createPost: $e');
       throw ServerException(message: e.toString());
     }
   }

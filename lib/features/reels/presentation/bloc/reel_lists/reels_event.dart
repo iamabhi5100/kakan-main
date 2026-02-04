@@ -68,6 +68,26 @@ class DeleteReelEvent extends ReelsEvent {
 
 class PauseAllReelsEvent extends ReelsEvent {}
 
-class GetFeedEvent extends ReelsEvent {}
+// ADDED FOR COMMENTS
+class GetReelCommentsEvent extends ReelsEvent {
+  final String reelId;
+  const GetReelCommentsEvent({required this.reelId});
+  @override
+  List<Object> get props => [reelId];
+}
 
-class FetchMoreFeedsEvent extends ReelsEvent {}
+class AddReelCommentEvent extends ReelsEvent {
+  final String reelId;
+  final String content;
+  const AddReelCommentEvent({required this.reelId, required this.content});
+  @override
+  List<Object> get props => [reelId, content];
+}
+
+class DeleteReelCommentEvent extends ReelsEvent {
+  final String commentId;
+  final String reelId;
+  const DeleteReelCommentEvent({required this.commentId, required this.reelId});
+  @override
+  List<Object> get props => [commentId, reelId];
+}

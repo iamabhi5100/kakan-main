@@ -1,5 +1,3 @@
-// lib/features/login/presentation/widgets/onboarding_form.dart
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -42,6 +40,7 @@ class _OnboardingFormState extends State<OnboardingForm>
 
   String? _fullNameError;
   String? _emailError;
+  String? _usernameSpaceError;
 
   Timer? _debounce;
 
@@ -90,6 +89,18 @@ class _OnboardingFormState extends State<OnboardingForm>
         _isUsernameAvailable = false;
         _isCheckingUsername = false;
         _rotationController.stop();
+        _usernameSpaceError = null;
+      });
+      return;
+    }
+
+    if (trimmed.contains(' ')) {
+      setState(() {
+        _usernameStatus = null;
+        _isUsernameAvailable = false;
+        _isCheckingUsername = false;
+        _rotationController.stop();
+        _usernameSpaceError = 'Username cannot contain spaces';
       });
       return;
     }
@@ -97,6 +108,7 @@ class _OnboardingFormState extends State<OnboardingForm>
     setState(() {
       _isCheckingUsername = true;
       _rotationController.repeat();
+      _usernameSpaceError = null;
     });
 
     try {
@@ -146,7 +158,8 @@ class _OnboardingFormState extends State<OnboardingForm>
         _fullNameError == null;
     final emailValid = _emailController.text.trim().isEmpty ||
         _emailError == null;
-    return _isUsernameAvailable && nameValid && emailValid;
+    final usernameValid = _isUsernameAvailable && _usernameSpaceError == null;
+    return usernameValid && nameValid && emailValid;
   }
 
   @override
@@ -216,7 +229,7 @@ class _OnboardingFormState extends State<OnboardingForm>
                               controller: _usernameController,
                               decoration: InputDecoration(
                                 suffixIcon: IconButton(
-                                  onPressed: _isCheckingUsername
+                                  onPressed: _isCheckingUsername || _usernameSpaceError != null
                                       ? null
                                       : _onRefreshUsername,
                                   icon: RotationTransition(
@@ -250,24 +263,24 @@ class _OnboardingFormState extends State<OnboardingForm>
                               enabled: context.watch<OtpBloc>().state
                                   is! OtpLoading,
                             ),
-                            if (_usernameStatus != null) ...[
+                            if (_usernameStatus != null || _usernameSpaceError != null) ...[
                               const Gap(8),
                               Row(
                                 children: [
                                   Icon(
-                                    _isUsernameAvailable
+                                    _isUsernameAvailable && _usernameSpaceError == null
                                         ? Icons.check_circle
                                         : Icons.cancel,
-                                    color: _isUsernameAvailable
+                                    color: _isUsernameAvailable && _usernameSpaceError == null
                                         ? Colors.green
                                         : Colors.red,
                                     size: 20,
                                   ),
                                   const Gap(5),
                                   Text(
-                                    _usernameStatus!,
+                                    _usernameSpaceError ?? _usernameStatus!,
                                     style: TextStyle(
-                                      color: _isUsernameAvailable
+                                      color: _isUsernameAvailable && _usernameSpaceError == null
                                           ? Colors.green
                                           : Colors.red,
                                       fontSize: 12,

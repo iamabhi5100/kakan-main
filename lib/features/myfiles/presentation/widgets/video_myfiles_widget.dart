@@ -1,17 +1,14 @@
 import 'dart:io';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_new/return_code.dart';
+import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_full/return_code.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:gap/gap.dart';
 import 'package:kakan/config/theme.dart';
-import 'package:kakan/core/error/exceptions.dart';
 import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/core/network/api_service.dart';
-import 'package:kakan/core/utils/app_permissions.dart';
 import 'package:kakan/features/myfiles/domain/entities/download_entity.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/delete_download/delete_download_bloc.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/delete_download/delete_download_event.dart';
@@ -21,10 +18,9 @@ import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_eve
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_state.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:kakan/injection_container.dart' as di;
-import 'package:go_router/go_router.dart';
 import 'package:toastification/toastification.dart';
 
-enum VideoMenuOption { delete, makeTune, exportAudio }
+enum VideoMenuOption { exportAudio, editVideo, delete }
 
 class VideoMyfilesWidget extends StatefulWidget {
   final VoidCallback? onSwitchToAudioTab;
@@ -32,52 +28,67 @@ class VideoMyfilesWidget extends StatefulWidget {
   const VideoMyfilesWidget({super.key, this.onSwitchToAudioTab});
 
   @override
-  _VideoMyfilesWidgetState createState() => _VideoMyfilesWidgetState();
+  State<VideoMyfilesWidget> createState() => _VideoMyfilesWidgetState();
 }
 
 class _VideoMyfilesWidgetState extends State<VideoMyfilesWidget> {
-  Future<void> _exportToAudio(
-    BuildContext context,
-    DownloadEntity download,
-  ) async {
-    if (download.mediaFile == null) return;
-    final hasPermissions = await AppPermissions.requestAllPermissions(context);
-    if (!hasPermissions) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
-
-    final fileName = 'temp_video_${download.id}.mp4';
-    final tempDir = await getTemporaryDirectory();
-    final filePath = '${tempDir.path}/$fileName';
-    final dio = Dio();
-    try {
-      await dio.download(download.mediaFile!, filePath);
-    } catch (e) {
-      if (kDebugMode) print('Download failed: $e');
-      if (context.mounted) Navigator.pop(context);
+  Future<void> _exportToAudio(BuildContext context, DownloadEntity download) async {
+    if (download.mediaFile == null || download.mediaFile!.isEmpty) {
+      toastification.show(
+        context: context,
+        title: const Text('No video URL to export'),
+        type: ToastificationType.error,
+        style: ToastificationStyle.fillColored,
+      );
       return;
     }
 
-    final outputPath =
-        '${tempDir.path}/audio_${download.id}_${DateTime.now().millisecondsSinceEpoch}.mp3';
-    final command = '-i "$filePath" -vn -c:a mp3 -y "$outputPath"';
-    await FFmpegKit.executeAsync(command, (session) async {
-      final returnCode = await session.getReturnCode();
-      if (context.mounted) Navigator.pop(context);
+    // show spinner
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+    }
 
-      if (ReturnCode.isSuccess(returnCode)) {
+    final tempDir = await getTemporaryDirectory();
+    final srcPath = '${tempDir.path}/temp_video_${download.id}.mp4';
+    final outPath =
+        '${tempDir.path}/audio_${download.id}_${DateTime.now().millisecondsSinceEpoch}.mp3';
+
+    final dio = Dio();
+
+    // 1) Download video to app cache (no runtime permission required)
+    try {
+      await dio.download(download.mediaFile!, srcPath);
+    } catch (e) {
+      if (kDebugMode) print('Download failed: $e');
+      if (mounted) Navigator.of(context).pop(); // close spinner
+      toastification.show(
+        context: context,
+        title: const Text('Failed to download video'),
+        type: ToastificationType.error,
+        style: ToastificationStyle.fillColored,
+      );
+      return;
+    }
+
+    // 2) Convert to MP3 with FFmpeg (close spinner in callback)
+    final cmd = '-i "$srcPath" -vn -c:a mp3 -y "$outPath"';
+    await FFmpegKit.executeAsync(cmd, (session) async {
+      // ensure spinner closed when we finish convert (success or fail)
+      if (mounted) Navigator.of(context).pop();
+
+      final rc = await session.getReturnCode();
+
+      if (ReturnCode.isSuccess(rc)) {
+        // 3) Upload the resulting mp3
         try {
           final apiService = di.sl<ApiService>();
           final formData = FormData.fromMap({
             'media_type': 'audio',
-            'media_file': await MultipartFile.fromFile(
-              outputPath,
-              filename: 'audio.mp3',
-            ),
+            'media_file': await MultipartFile.fromFile(outPath, filename: 'audio.mp3'),
             'title': download.title ?? 'Untitled Audio',
             'duration': download.duration ?? '00:00:00',
           });
@@ -86,26 +97,44 @@ class _VideoMyfilesWidgetState extends State<VideoMyfilesWidget> {
             formData,
             includeAuth: true,
           );
-          if (context.mounted) {
-            toastification.show(
-              context: context,
-              title: const Text('Audio uploaded successfully!'),
-              type: ToastificationType.success,
-              style: ToastificationStyle.fillColored,
-              autoCloseDuration: const Duration(seconds: 3),
-              backgroundColor: Colors.white,
-            );
-            context.read<DownloadsBloc>().add(
-              GetDownloadsEvent(mediaType: 'audio'),
-            );
-            widget.onSwitchToAudioTab?.call();
-          }
+
+          if (!mounted) return;
+          toastification.show(
+            context: context,
+            title: const Text('Audio exported successfully!'),
+            type: ToastificationType.success,
+            style: ToastificationStyle.fillColored,
+            autoCloseDuration: const Duration(seconds: 3),
+          );
+          widget.onSwitchToAudioTab?.call();
         } catch (e) {
           if (kDebugMode) print('Upload failed: $e');
+          if (!mounted) return;
+          toastification.show(
+            context: context,
+            title: const Text('Upload failed'),
+            type: ToastificationType.error,
+            style: ToastificationStyle.fillColored,
+          );
         }
       } else {
-        if (kDebugMode) print('FFmpeg failed with code $returnCode');
+        if (kDebugMode) print('FFmpeg failed with code $rc');
+        if (!mounted) return;
+        toastification.show(
+          context: context,
+          title: const Text('Could not convert to audio'),
+          type: ToastificationType.error,
+          style: ToastificationStyle.fillColored,
+        );
       }
+
+      // 4) Cleanup temp files
+      try {
+        if (File(srcPath).existsSync()) File(srcPath).deleteSync();
+      } catch (_) {}
+      try {
+        if (File(outPath).existsSync()) File(outPath).deleteSync();
+      } catch (_) {}
     });
   }
 
@@ -118,23 +147,21 @@ class _VideoMyfilesWidgetState extends State<VideoMyfilesWidget> {
           if (state is DeleteDownloadSuccess) {
             toastification.show(
               context: context,
-              title: const Text('Video deleted successfully'),
+              title: const Text('Deleted'),
               type: ToastificationType.success,
               style: ToastificationStyle.fillColored,
-              autoCloseDuration: const Duration(seconds: 3),
-              backgroundColor: Colors.white,
+              autoCloseDuration: const Duration(seconds: 2),
             );
+            // ✅ FIX: use the event your bloc actually supports
             context.read<DownloadsBloc>().add(
-              GetDownloadsEvent(mediaType: 'video'),
-            );
+                  GetDownloadsEvent(mediaType: 'video'),
+                );
           } else if (state is DeleteDownloadError) {
             toastification.show(
               context: context,
-              title: Text('Failed to delete video: ${state.message}'),
+              title: Text(state.message),
               type: ToastificationType.error,
               style: ToastificationStyle.fillColored,
-              autoCloseDuration: const Duration(seconds: 3),
-              backgroundColor: Colors.white,
             );
           }
         },
@@ -143,13 +170,12 @@ class _VideoMyfilesWidgetState extends State<VideoMyfilesWidget> {
             if (state is DownloadsInitial || state is DownloadsLoading) {
               return const Center(child: CircularProgressIndicator());
             } else if (state is DownloadsError) {
-              return Center(
-                child: Text('Failed to load videos: ${state.message}'),
-              );
+              return Center(child: Text('Failed to load videos: ${state.message}'));
             } else if (state is DownloadsLoaded) {
               if (state.downloads.isEmpty) {
                 return const Center(child: Text('No videos found'));
               }
+
               return ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -159,80 +185,83 @@ class _VideoMyfilesWidgetState extends State<VideoMyfilesWidget> {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(
                           width: 120,
                           height: 80,
-                          child: Image.asset('assets/images/youtubeicon.png'),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8.0),
+                            child: Image.network(
+                              download.thumbnail ?? '',
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Center(
+                                child: Image.asset('assets/images/youtubeicon.png'),
+                              ),
+                            ),
+                          ),
                         ),
-                        const Gap(10),
+                        const Gap(12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 download.title ?? 'Untitled Video',
-                                style: appTheme.textTheme.titleSmall,
+                                style: appTheme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
+                              const Gap(4),
                               Text(
                                 download.created,
-                                style: appTheme.textTheme.titleSmall?.copyWith(
-                                  color: Colors.grey,
+                                style: appTheme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey.shade600,
                                 ),
                               ),
+                              const Gap(4),
                               Text(
-                                download.duration ?? 'Unknown duration',
-                                style: appTheme.textTheme.titleSmall?.copyWith(
-                                  color: Colors.grey,
+                                download.duration ?? '00:00',
+                                style: appTheme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.grey.shade600,
                                 ),
                               ),
                             ],
                           ),
                         ),
                         PopupMenuButton<VideoMenuOption>(
-                          icon: const Icon(Icons.more_horiz_rounded),
-                          onSelected: (option) async {
+                          icon: const Icon(Icons.more_horiz_rounded, color: Colors.grey),
+                          onSelected: (option) {
                             switch (option) {
-                              case VideoMenuOption.delete:
-                                context.read<DeleteDownloadBloc>().add(
-                                  DeleteDownloadEvent(mediaId: download.id),
-                                );
-                                break;
-                              case VideoMenuOption.makeTune:
-                                toastification.show(
-                                  context: context,
-                                  title: const Text(
-                                    'Make a tune not implemented',
-                                  ),
-                                  type: ToastificationType.info,
-                                  style: ToastificationStyle.fillColored,
-                                  autoCloseDuration: const Duration(seconds: 3),
-                                  backgroundColor: Colors.white,
-                                );
-                                break;
                               case VideoMenuOption.exportAudio:
-                                await _exportToAudio(context, download);
+                                _exportToAudio(context, download);
+                                break;
+                              case VideoMenuOption.editVideo:
+                                break;
+                              case VideoMenuOption.delete:
+                                context
+                                    .read<DeleteDownloadBloc>()
+                                    .add(DeleteDownloadEvent(mediaId: download.id));
                                 break;
                             }
                           },
-                          itemBuilder:
-                              (context) => const [
-                                PopupMenuItem(
-                                  value: VideoMenuOption.delete,
-                                  child: Text('Delete'),
-                                ),
-                                PopupMenuItem(
-                                  value: VideoMenuOption.makeTune,
-                                  enabled: false,
-                                  child: Text('Make a tune'),
-                                ),
-                                PopupMenuItem(
-                                  value: VideoMenuOption.exportAudio,
-                                  child: Text('Export to audio'),
-                                ),
-                              ],
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: VideoMenuOption.exportAudio,
+                              child: Text('Export Audio'),
+                            ),
+                            PopupMenuItem(
+                              value: VideoMenuOption.editVideo,
+                              enabled: false,
+                              child: Text('Edit Video'),
+                            ),
+                            PopupMenuItem(
+                              value: VideoMenuOption.delete,
+                              child: Text('Delete'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -240,6 +269,7 @@ class _VideoMyfilesWidgetState extends State<VideoMyfilesWidget> {
                 },
               );
             }
+
             return const Center(child: Text('Loading videos...'));
           },
         ),

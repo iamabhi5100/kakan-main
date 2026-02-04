@@ -16,10 +16,12 @@ class ProfilePostsRepositoryImpl implements ProfilePostsRepository {
   });
 
   @override
-  Future<Either<Failure, List<ProfilePostEntity>>> getProfilePosts(String mediaType) async {
+  // <-- MODIFIED: Add the userId parameter to match the abstract class
+  Future<Either<Failure, List<ProfilePostEntity>>> getProfilePosts(String userId, String mediaType) async {
     if (await networkInfo.isConnected) {
       try {
-        final posts = await remoteDataSource.getProfilePosts(mediaType);
+        // <-- MODIFIED: Pass both userId and mediaType to the data source
+        final posts = await remoteDataSource.getProfilePosts(userId, mediaType);
         return Right(posts);
       } on ServerException catch (e) {
         return Left(ServerFailure(exception: e));

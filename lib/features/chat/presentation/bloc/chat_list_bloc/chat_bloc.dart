@@ -78,26 +78,30 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     ));
   }
 
+  // NO ChatLoading for send
   Future<void> _onSendMessage(SendMessageEvent event, Emitter<ChatState> emit) async {
-    emit(ChatLoading());
-    final failureOrMessage = await sendMessage(SendMessageParams(chatId: event.chatId, content: event.content));
+    final failureOrMessage = await sendMessage(
+      SendMessageParams(chatId: event.chatId, content: event.content),
+    );
     emit(failureOrMessage.fold(
       (failure) => ChatError(message: _mapFailureToMessage(failure)),
       (message) => MessageSent(message: message),
     ));
   }
 
+  // NO ChatLoading for group send
   Future<void> _onSendGroupMessage(SendGroupMessageEvent event, Emitter<ChatState> emit) async {
-    emit(ChatLoading());
-    final failureOrMessage = await sendGroupMessage(SendGroupMessageParams(groupChatId: event.groupChatId, content: event.content));
+    final failureOrMessage = await sendGroupMessage(
+      SendGroupMessageParams(groupChatId: event.groupChatId, content: event.content),
+    );
     emit(failureOrMessage.fold(
       (failure) => ChatError(message: _mapFailureToMessage(failure)),
       (message) => MessageSent(message: message),
     ));
   }
 
+  // NO ChatLoading for media send
   Future<void> _onSendMediaMessage(SendMediaMessageEvent event, Emitter<ChatState> emit) async {
-    emit(ChatLoading());
     final failureOrMessage = await sendMessage(SendMessageParams(
       chatId: event.chatId,
       content: event.content,
@@ -110,8 +114,8 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     ));
   }
 
+  // NO ChatLoading for media group send
   Future<void> _onSendMediaGroupMessage(SendMediaGroupMessageEvent event, Emitter<ChatState> emit) async {
-    emit(ChatLoading());
     final failureOrMessage = await sendGroupMessage(SendGroupMessageParams(
       groupChatId: event.groupChatId,
       content: event.content,
@@ -142,16 +146,12 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     ));
   }
 
+  // NO ChatLoading for delete
   Future<void> _onDeleteMessage(DeleteMessageEvent event, Emitter<ChatState> emit) async {
-    print('Deleting message with ID: ${event.messageId}');
-    emit(ChatLoading());
     final failureOrResponse = await deleteMessage(event.messageId);
     emit(failureOrResponse.fold(
-      (failure) {
-        print('Delete message failed: ${_mapFailureToMessage(failure)}');
-        return ChatError(message: _mapFailureToMessage(failure));
-      },
-      (response) => MessageDeleted(),
+      (failure) => ChatError(message: _mapFailureToMessage(failure)),
+      (_) => MessageDeleted(),
     ));
   }
 
@@ -160,7 +160,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatState> {
     final failureOrResponse = await deleteGroupChat(event.groupChatId);
     emit(failureOrResponse.fold(
       (failure) => ChatError(message: _mapFailureToMessage(failure)),
-      (response) => GroupChatDeleted(),
+      (_) => GroupChatDeleted(),
     ));
   }
 

@@ -1,3 +1,4 @@
+// lib/features/login/data/datasources/remote_data_source.dart
 import 'package:dio/dio.dart';
 import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/core/error/exceptions.dart';
@@ -99,11 +100,11 @@ class RemoteDataSourceImpl implements RemoteDataSource {
         refreshToken: verifyResponse.refreshToken,
       );
       if (verifyResponse.userDetails != null) {
-        await sessionManager.saveUserId(verifyResponse.userDetails!.id);
-        await sessionManager.saveAuthUserId(verifyResponse.userDetails!.user); // Save authUserId
+        await sessionManager.saveProfileId(verifyResponse.userDetails!.id); // Save profile ID
+        await sessionManager.saveUserId(verifyResponse.userDetails!.user); // Save user ID
       }
       await sessionManager.clearOtpToken();
-      print('OTP verification successful, accessToken: ${verifyResponse.accessToken}, userId: ${verifyResponse.userDetails?.id}, authUserId: ${verifyResponse.userDetails?.user}');
+      print('OTP verification successful, accessToken: ${verifyResponse.accessToken}, profileId: ${verifyResponse.userDetails?.id}, userId: ${verifyResponse.userDetails?.user}');
       return VerifyOtpResponseWrapper.fromVerifyOtpResponse(verifyResponse);
     } catch (e) {
       print('Error during OTP verification: $e');
@@ -129,7 +130,10 @@ class RemoteDataSourceImpl implements RemoteDataSource {
         includeAuth: true,
         cancelToken: cancelToken,
       );
-      print('Profile creation successful');
+      print('Profile creation successful: $response');
+      if (response is Map<String, dynamic> && response['id'] != null) {
+        await sessionManager.saveProfileId(response['id']);
+      }
       return "Profile created successfully";
     } catch (e) {
       print('Error during profile creation: $e');

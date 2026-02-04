@@ -9,7 +9,7 @@ import audio_session
 import audioplayers_darwin
 import connectivity_plus
 import device_info_plus
-import ffmpeg_kit_flutter_new
+import ffmpeg_kit_flutter_new_full
 import file_picker
 import file_selector_macos
 import flutter_inappwebview_macos

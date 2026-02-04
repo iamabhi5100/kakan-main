@@ -17,7 +17,7 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
   late PageController _pageController;
   late ReelsBloc _reelsBloc;
   int _currentIndex = 0;
-  final int _preloadRange = 0; // Only preload current reel to reduce memory usage
+  final int _preloadRange = 0;
   final int _fetchThreshold = 3;
 
   @override
@@ -54,7 +54,8 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
 
   void _checkForMoreReels() {
     final state = _reelsBloc.state;
-    if (state is ReelsLoaded) {
+    // FIX: Check against ReelsActionState to be more robust
+    if (state is ReelsActionState) {
       if (_currentIndex >= state.reels.length - _fetchThreshold && state.hasMore) {
         print('DEBUG: Fetching more reels at index $_currentIndex');
         _reelsBloc.add(FetchMoreReelsEvent());
@@ -90,6 +91,15 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
           child: RefreshIndicator(
             onRefresh: _refreshReels,
             child: BlocBuilder<ReelsBloc, ReelsState>(
+              // THIS IS THE FIX:
+              // We tell the builder to only rebuild if the state is NOT one
+              // of the comment-specific states. This prevents the main UI from
+              // resetting when the comment sheet is being used.
+              buildWhen: (previous, current) {
+                return current is! ReelCommentsLoading &&
+                    current is! ReelCommentsLoaded &&
+                    current is! ReelCommentsError;
+              },
               builder: (context, state) {
                 print('DEBUG: ReelsBloc state: $state');
                 if (state is ReelsLoading && state.reels.isEmpty) {
@@ -112,29 +122,10 @@ class _ReelsPageState extends State<ReelsPage> with WidgetsBindingObserver {
                       ],
                     ),
                   );
-                } else if (state is ReelsLoaded ||
-                    state is ReelsLikeUpdating ||
-                    state is ReelsRepostUpdating ||
-                    state is ReelsLikeError ||
-                    state is ReelsShareTargetsLoaded) {
-                  final reels = state is ReelsLoaded
-                      ? state.reels
-                      : state is ReelsLikeUpdating
-                          ? state.reels
-                          : state is ReelsRepostUpdating
-                              ? state.reels
-                              : state is ReelsShareTargetsLoaded
-                                  ? state.reels
-                                  : (state as ReelsLikeError).reels;
-                  final hasMore = state is ReelsLoaded
-                      ? state.hasMore
-                      : state is ReelsLikeUpdating
-                          ? state.hasMore
-                          : state is ReelsRepostUpdating
-                              ? state.hasMore
-                              : state is ReelsShareTargetsLoaded
-                                  ? state.hasMore
-                                  : (state as ReelsLikeError).hasMore;
+                } else if (state is ReelsActionState) { // Simplified check
+                  final reels = state.reels;
+                  final hasMore = state.hasMore;
+
                   return PageView.builder(
                     controller: _pageController,
                     scrollDirection: Axis.vertical,

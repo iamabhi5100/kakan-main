@@ -1,9 +1,9 @@
-import 'package:chucker_flutter/chucker_flutter.dart';
+// lib/core/network/api_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
-import 'package:kakan/config/chucker_config.dart';
 import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/core/error/exceptions.dart';
+import 'package:kakan/core/error/app_error.dart';
 import 'package:kakan/core/utils/session_manager.dart';
 import 'package:kakan/core/network/models/refresh_token_request.dart';
 import 'package:kakan/core/network/models/refresh_token_response.dart';
@@ -26,7 +26,7 @@ class ApiService {
           ),
         ) {
     _dio.interceptors.addAll([
-      if (ChuckerConfig.isEnabled) ChuckerDioInterceptor(),
+      // (Optional) request/response logging
       LogInterceptor(
         request: true,
         requestHeader: true,
@@ -34,8 +34,10 @@ class ApiService {
         responseHeader: true,
         responseBody: true,
         error: true,
-        logPrint: (message) => print(message.toString()),
+        logPrint: (message) => debugPrint(message.toString()),
       ),
+
+      // Auth injection + auto refresh on 401
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           if (options.headers.containsKey('Authorization') &&
@@ -44,35 +46,154 @@ class ApiService {
             if (accessToken != null) {
               options.headers['Authorization'] = 'Bearer $accessToken';
             } else {
-              print('No access token available');
+              debugPrint('No access token available');
               options.headers.remove('Authorization');
             }
           }
-          print('Request headers: ${options.headers}');
+          debugPrint('Request headers: ${options.headers}');
           return handler.next(options);
         },
         onError: (DioException error, ErrorInterceptorHandler handler) async {
-          print(
-            'Request error: method=${error.requestOptions.method}, uri=${error.requestOptions.uri}, error=$error',
+          debugPrint(
+            'Request error: method=${error.requestOptions.method}, '
+            'uri=${error.requestOptions.uri}, error=$error',
           );
-          if (error.response?.statusCode == 401 &&
-              error.requestOptions.headers['Authorization']?.startsWith('Bearer ') == true) {
+
+          final hadBearer = error.requestOptions.headers['Authorization']
+                  ?.toString()
+                  .startsWith('Bearer ') ==
+              true;
+
+          // Try token refresh only when 401 arrived after using a Bearer token
+          if (error.response?.statusCode == 401 && hadBearer) {
             try {
               final newTokens = await _refreshToken();
               if (newTokens != null) {
-                error.requestOptions.headers['Authorization'] = 'Bearer ${newTokens.accessToken}';
-                return handler.resolve(await _dio.fetch(error.requestOptions));
+                // retry the original request with new token
+                error.requestOptions.headers['Authorization'] =
+                    'Bearer ${newTokens.accessToken}';
+                final retryResponse = await _dio.fetch(error.requestOptions);
+                return handler.resolve(retryResponse);
               }
-            } catch (e, stackTrace) {
-              print('Token refresh failed: $e\nStack trace: $stackTrace');
-              return handler.next(error);
+            } catch (e, st) {
+              debugPrint('Token refresh failed: $e\n$st');
+              // fall through to the original error
             }
           }
+
           return handler.next(error);
         },
       ),
     ]);
   }
+
+  // ---------------------------
+  // Centralized error mapping ✅
+  // ---------------------------
+
+  // ADD THESE TWO METHODS *INSIDE* class ApiService
+  ServerException _mapDioToServerException(DioException e) {
+    final sc = e.response?.statusCode;
+    final raw = e.response?.data?.toString() ?? e.message ?? '';
+
+    // Timeouts
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout) {
+      return ServerException(
+        type: AppErrorType.serverTimeout,
+        message: 'Request timed out. Please try again.',
+        statusCode: sc,
+      );
+    }
+
+    // No internet / connection error
+    if (e.type == DioExceptionType.connectionError) {
+      return ServerException(
+        type: AppErrorType.noInternet,
+        message: 'No internet connection',
+        statusCode: sc,
+      );
+    }
+
+    // HTTP status mapping
+    switch (sc) {
+      case 400:
+        return ServerException(
+          type: AppErrorType.badRequest,
+          message: _extractMessage(raw) ?? 'Invalid request',
+          statusCode: sc,
+        );
+      case 401:
+        return ServerException(
+          type: AppErrorType.unauthorized,
+          message: 'Authentication failed. Please log in again.',
+          statusCode: sc,
+        );
+      case 403:
+        return ServerException(
+          type: AppErrorType.forbidden,
+          message: 'Forbidden: You lack permission.',
+          statusCode: sc,
+        );
+      case 404:
+        return ServerException(
+          type: AppErrorType.notFound,
+          message: 'Resource not found.',
+          statusCode: sc,
+        );
+      case 413:
+        return ServerException(
+          type: AppErrorType.payloadTooLarge,
+          message: 'Request Entity Too Large',
+          statusCode: sc,
+        );
+      case 429:
+        return ServerException(
+          type: AppErrorType.tooManyRequests,
+          message: 'Too many requests. Please wait.',
+          statusCode: sc,
+        );
+      case 500:
+        return ServerException(
+          type: AppErrorType.unknown,
+          message: 'Server error',
+          statusCode: sc,
+        );
+      case 502:
+      case 503:
+        return ServerException(
+          type: AppErrorType.serverMaintenance,
+          message: 'Service unavailable. Please try again.',
+          statusCode: sc,
+        );
+      default:
+        // Dio cancelled case (user action)
+        if (e.type == DioExceptionType.cancel) {
+          return ServerException(
+            type: AppErrorType.unknown,
+            message: 'Request was cancelled',
+            statusCode: sc,
+          );
+        }
+        // Fallback
+        return ServerException(
+          type: AppErrorType.unknown,
+          message: 'Unexpected error${sc != null ? ' (Status $sc)' : ''}',
+          statusCode: sc,
+        );
+    }
+  }
+
+  /// Try pulling a nice message out of a raw string/json-ish body
+  String? _extractMessage(String raw) {
+    if (raw.trim().isEmpty) return null;
+    return raw;
+  }
+
+  // --------------
+  // HTTP methods
+  // --------------
 
   Future<dynamic> get(
     String endpoint, {
@@ -85,60 +206,13 @@ class ApiService {
         cancelToken: cancelToken,
         options: Options(headers: includeAuth ? {'Authorization': true} : null),
       );
-      print('GET $endpoint Response: ${response.data}');
+      debugPrint('GET $endpoint Response: ${response.data}');
       return response.data;
     } on DioException catch (e, stackTrace) {
-      print('GET $endpoint DioException: $e\nStack trace: $stackTrace');
-      if (e.type == DioExceptionType.cancel) {
-        throw ServerException(message: 'Request was cancelled');
-      }
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        throw ServerException(message: 'Request timed out. Please try again.');
-      }
-      if (e.type == DioExceptionType.connectionError) {
-        throw ServerException(message: 'No internet connection');
-      }
-      if (e.response != null) {
-        final statusCode = e.response!.statusCode;
-        final body = e.response!.data.toString();
-        switch (statusCode) {
-          case 400:
-            try {
-              final errorJson = jsonDecode(body);
-              final errorMessage =
-                  errorJson['error'] ?? errorJson['detail'] ?? 'Invalid request';
-              throw ServerException(message: errorMessage);
-            } catch (_) {
-              throw ServerException(message: 'Invalid request');
-            }
-          case 401:
-            throw ServerException(
-              message: 'Authentication failed. Please log in again.',
-            );
-          case 403:
-            throw ServerException(message: 'Forbidden: You lack permission.');
-          case 404:
-            throw ServerException(message: 'Resource not found.');
-          case 429:
-            throw ServerException(message: 'Too many requests. Please wait.');
-          case 500:
-            throw ServerException(message: 'Server error');
-          case 502:
-          case 503:
-            throw ServerException(
-              message: 'Service unavailable. Please try again.',
-            );
-          default:
-            throw ServerException(
-              message: 'Unexpected error (Status $statusCode)',
-            );
-        }
-      }
-      throw ServerException(message: 'Network error: ${e.message}');
+      debugPrint('GET $endpoint DioException: $e\nStack trace: $stackTrace');
+      throw _mapDioToServerException(e);
     } catch (e, stackTrace) {
-      print('GET $endpoint Unexpected error: $e\nStack trace: $stackTrace');
+      debugPrint('GET $endpoint Unexpected error: $e\nStack trace: $stackTrace');
       throw ServerException(message: 'Unexpected error: $e');
     }
   }
@@ -158,79 +232,35 @@ class ApiService {
         options: Options(headers: includeAuth ? {'Authorization': true} : null),
         onSendProgress: onSendProgress,
       );
-      print('POST $endpoint Response: ${response.data}');
+      debugPrint('POST $endpoint Response: ${response.data}');
       return response.data;
     } on DioException catch (e, stackTrace) {
-      print(
-        'POST $endpoint DioException: statusCode=${e.response?.statusCode}, data=${e.response?.data}, message=${e.message}, stackTrace=$stackTrace',
-      );
-      if (e.type == DioExceptionType.cancel) {
-        throw ServerException(message: 'Request was cancelled');
-      }
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        throw ServerException(message: 'Request timed out. Please try again.');
-      }
-      if (e.type == DioExceptionType.connectionError) {
-        throw ServerException(message: 'No internet connection');
-      }
-      if (e.response != null) {
-        final statusCode = e.response!.statusCode;
-        final body = e.response!.data.toString();
-        switch (statusCode) {
-          case 400:
-            try {
-              final errorJson = jsonDecode(body);
-              final errorMessage =
-                  errorJson['non_field_errors']?.join(' ') ??
-                  errorJson['error'] ??
-                  errorJson['detail'] ??
-                  'Invalid request';
-              throw ServerException(message: errorMessage);
-            } catch (_) {
-              throw ServerException(message: 'Invalid request');
-            }
-          case 401:
-            throw ServerException(
-              message: 'Authentication failed. Please request a new OTP.',
-            );
-          case 403:
-            throw ServerException(message: 'Forbidden: You lack permission.');
-          case 404:
-            throw ServerException(message: 'Resource not found.');
-          case 429:
-            throw ServerException(message: 'Too many requests. Please wait.');
-          case 500:
-            if (body.contains('IntegrityError') &&
-                body.contains('users_userprofile_username_085fa49f_uniq')) {
-              throw ServerException(
-                message: 'Username conflict. Please try a different username.',
-              );
-            }
-            if (body.contains('IntegrityError')) {
-              throw ServerException(
-                message:
-                    'Phone number already exists. Please use a different number.',
-              );
-            }
-            throw ServerException(message: 'Server error');
-          case 502:
-          case 503:
-            throw ServerException(
-              message: 'Service unavailable. Please try again.',
-            );
-          case 413:
-            throw ServerException(message: 'Request Entity Too Large');
-          default:
-            throw ServerException(
-              message: 'Unexpected error (Status $statusCode)',
-            );
+      debugPrint('POST $endpoint DioException: $e\nStack trace: $stackTrace');
+
+      // (Optional) keep your special IntegrityError handling
+      final rawBody = e.response?.data?.toString() ?? '';
+      if (e.response?.statusCode == 500) {
+        if (rawBody.contains('IntegrityError') &&
+            rawBody.contains('users_userprofile_username_085fa49f_uniq')) {
+          throw ServerException(
+            type: AppErrorType.badRequest,
+            message: 'Username conflict. Please try a different username.',
+            statusCode: e.response?.statusCode,
+          );
+        }
+        if (rawBody.contains('IntegrityError')) {
+          throw ServerException(
+            type: AppErrorType.badRequest,
+            message:
+                'Phone number already exists. Please use a different number.',
+            statusCode: e.response?.statusCode,
+          );
         }
       }
-      throw ServerException(message: 'Network error: ${e.message}');
+
+      throw _mapDioToServerException(e);
     } catch (e, stackTrace) {
-      print('POST $endpoint Unexpected error: $e\nStack trace: $stackTrace');
+      debugPrint('POST $endpoint Unexpected error: $e\nStack trace: $stackTrace');
       throw ServerException(message: 'Unexpected error: $e');
     }
   }
@@ -248,63 +278,13 @@ class ApiService {
         cancelToken: cancelToken,
         options: Options(headers: includeAuth ? {'Authorization': true} : null),
       );
-      print('PATCH $endpoint Response: ${response.data}');
+      debugPrint('PATCH $endpoint Response: ${response.data}');
       return response.data;
     } on DioException catch (e, stackTrace) {
-      print('PATCH $endpoint DioException: $e\nStack trace: $stackTrace');
-      if (e.type == DioExceptionType.cancel) {
-        throw ServerException(message: 'Request was cancelled');
-      }
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        throw ServerException(message: 'Request timed out. Please try again.');
-      }
-      if (e.type == DioExceptionType.connectionError) {
-        throw ServerException(message: 'No internet connection');
-      }
-      if (e.response != null) {
-        final statusCode = e.response!.statusCode;
-        final body = e.response!.data.toString();
-        switch (statusCode) {
-          case 400:
-            try {
-              final errorJson = jsonDecode(body);
-              final errorMessage =
-                  errorJson['user']?.first ??
-                  errorJson['error'] ??
-                  errorJson['detail'] ??
-                  'Invalid request';
-              throw ServerException(message: errorMessage);
-            } catch (_) {
-              throw ServerException(message: 'Invalid request');
-            }
-          case 401:
-            throw ServerException(
-              message: 'Authentication failed. Please log in again.',
-            );
-          case 403:
-            throw ServerException(message: 'Forbidden: You lack permission.');
-          case 404:
-            throw ServerException(message: 'Resource not found.');
-          case 429:
-            throw ServerException(message: 'Too many requests. Please wait.');
-          case 500:
-            throw ServerException(message: 'Server error');
-          case 502:
-          case 503:
-            throw ServerException(
-              message: 'Service unavailable. Please try again.',
-            );
-          default:
-            throw ServerException(
-              message: 'Unexpected error (Status $statusCode)',
-            );
-        }
-      }
-      throw ServerException(message: 'Network error: ${e.message}');
+      debugPrint('PATCH $endpoint DioException: $e\nStack trace: $stackTrace');
+      throw _mapDioToServerException(e);
     } catch (e, stackTrace) {
-      print('PATCH $endpoint Unexpected error: $e\nStack trace: $stackTrace');
+      debugPrint('PATCH $endpoint Unexpected error: $e\nStack trace: $stackTrace');
       throw ServerException(message: 'Unexpected error: $e');
     }
   }
@@ -320,62 +300,13 @@ class ApiService {
         cancelToken: cancelToken,
         options: Options(headers: includeAuth ? {'Authorization': true} : null),
       );
-      print('DELETE $endpoint Response: ${response.data}');
+      debugPrint('DELETE $endpoint Response: ${response.data}');
       return response.data;
     } on DioException catch (e, stackTrace) {
-      print('DELETE $endpoint DioException: $e\nStack trace: $stackTrace');
-      if (e.type == DioExceptionType.cancel) {
-        throw ServerException(message: 'Request was cancelled');
-      }
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        throw ServerException(message: 'Request timed out. Please try again.');
-      }
-      if (e.type == DioExceptionType.connectionError) {
-        throw ServerException(message: 'No internet connection');
-      }
-      if (e.response != null) {
-        final statusCode = e.response!.statusCode;
-        final body = e.response!.data.toString();
-        switch (statusCode) {
-          case 400:
-            try {
-              final errorJson = jsonDecode(body);
-              final errorMessage =
-                  errorJson['error'] ??
-                  errorJson['detail'] ??
-                  'Invalid request';
-              throw ServerException(message: errorMessage);
-            } catch (_) {
-              throw ServerException(message: 'Invalid request');
-            }
-          case 401:
-            throw ServerException(
-              message: 'Authentication failed. Please log in again.',
-            );
-          case 403:
-            throw ServerException(message: 'Forbidden: You lack permission.');
-          case 404:
-            throw ServerException(message: 'Resource not found.');
-          case 429:
-            throw ServerException(message: 'Too many requests. Please wait.');
-          case 500:
-            throw ServerException(message: 'Server error');
-          case 502:
-          case 503:
-            throw ServerException(
-              message: 'Service unavailable. Please try again.',
-            );
-          default:
-            throw ServerException(
-              message: 'Unexpected error (Status $statusCode)',
-            );
-        }
-      }
-      throw ServerException(message: 'Network error: ${e.message}');
+      debugPrint('DELETE $endpoint DioException: $e\nStack trace: $stackTrace');
+      throw _mapDioToServerException(e);
     } catch (e, stackTrace) {
-      print('DELETE $endpoint Unexpected error: $e\nStack trace: $stackTrace');
+      debugPrint('DELETE $endpoint Unexpected error: $e\nStack trace: $stackTrace');
       throw ServerException(message: 'Unexpected error: $e');
     }
   }
@@ -393,9 +324,10 @@ class ApiService {
         fileKey: await MultipartFile.fromFile(
           filePath,
           filename: path.basename(filePath),
-          contentType: lookupMimeType(filePath) != null
-              ? MediaType.parse(lookupMimeType(filePath)!)
-              : MediaType('application', 'octet-stream'),
+          contentType: (() {
+            final mime = lookupMimeType(filePath);
+            return mime != null ? MediaType.parse(mime) : MediaType('application', 'octet-stream');
+          })(),
         ),
       });
 
@@ -409,71 +341,20 @@ class ApiService {
         ),
         onSendProgress: onSendProgress,
       );
-      print('POST $endpoint Response: ${response.data}');
+      debugPrint('UPLOAD $endpoint Response: ${response.data}');
       return response.data;
     } on DioException catch (e, stackTrace) {
-      print(
-        'POST $endpoint DioException: statusCode=${e.response?.statusCode}, data=${e.response?.data}, message=${e.message}, stackTrace=$stackTrace',
-      );
-      if (e.type == DioExceptionType.cancel) {
-        throw ServerException(message: 'Request was cancelled');
-      }
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout) {
-        throw ServerException(message: 'Request timed out. Please try again.');
-      }
-      if (e.type == DioExceptionType.connectionError) {
-        throw ServerException(message: 'No internet connection');
-      }
-      if (e.response != null) {
-        final statusCode = e.response!.statusCode;
-        final body = e.response!.data.toString();
-        switch (statusCode) {
-          case 400:
-            try {
-              final errorJson = jsonDecode(body);
-              final errorMessage =
-                  errorJson['non_field_errors']?.join(' ') ??
-                  errorJson['error'] ??
-                  errorJson['detail'] ??
-                  'Invalid request';
-              throw ServerException(message: errorMessage);
-            } catch (_) {
-              throw ServerException(message: 'Invalid request');
-            }
-          case 401:
-            throw ServerException(
-              message: 'Authentication failed. Please request a new OTP.',
-            );
-          case 403:
-            throw ServerException(message: 'Forbidden: You lack permission.');
-          case 404:
-            throw ServerException(message: 'Resource not found.');
-          case 429:
-            throw ServerException(message: 'Too many requests. Please wait.');
-          case 500:
-            throw ServerException(message: 'Server error');
-          case 502:
-          case 503:
-            throw ServerException(
-              message: 'Service unavailable. Please try again.',
-            );
-          case 413:
-            throw ServerException(message: 'Request Entity Too Large');
-          default:
-            throw ServerException(
-              message: 'Unexpected error (Status $statusCode)',
-            );
-        }
-      }
-      throw ServerException(message: 'Network error: ${e.message}');
+      debugPrint('UPLOAD $endpoint DioException: $e\nStack trace: $stackTrace');
+      throw _mapDioToServerException(e);
     } catch (e, stackTrace) {
-      print('POST $endpoint Unexpected error: $e\nStack trace: $stackTrace');
+      debugPrint('UPLOAD $endpoint Unexpected error: $e\nStack trace: $stackTrace');
       throw ServerException(message: 'Unexpected error: $e');
     }
   }
 
+  // -------------------
+  // Token refresh flow
+  // -------------------
   Future<RefreshTokenResponse?> _refreshToken() async {
     final refreshToken = await sessionManager.getRefreshToken();
     if (refreshToken == null) {
@@ -485,6 +366,7 @@ class ApiService {
         RefreshTokenRequest(refreshToken: refreshToken).toJson(),
         includeAuth: false,
       );
+
       if (response is Map<String, dynamic> &&
           response.containsKey('access_token') &&
           response.containsKey('refresh_token')) {
@@ -498,7 +380,7 @@ class ApiService {
         throw ServerException(message: 'Invalid refresh token response');
       }
     } catch (e, stackTrace) {
-      print('Token refresh error: $e\nStack trace: $stackTrace');
+      debugPrint('Token refresh error: $e\nStack trace: $stackTrace');
       await sessionManager.clearTokens();
       throw ServerException(message: 'Failed to refresh token');
     }

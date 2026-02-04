@@ -1,14 +1,18 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:kakan/config/theme.dart';
 import 'package:kakan/features/myfiles/domain/entities/download_entity.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_bloc.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_event.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_state.dart';
+import 'package:kakan/features/postmyfeed/data/datasources/post_remote_data_source.dart';
+import 'package:kakan/injection_container.dart' as di;
 
 class MainPostScreen extends StatefulWidget {
   const MainPostScreen({super.key});
@@ -19,289 +23,532 @@ class MainPostScreen extends StatefulWidget {
 
 class _MainPostScreenState extends State<MainPostScreen> {
   final ImagePicker _picker = ImagePicker();
+  final PostRemoteDataSource _postRemoteDataSource = di.sl<PostRemoteDataSource>();
+  bool _isLoading = false;
 
-  // Show bottom modal sheet with options: From Gallery or From Library
+  Future<void> _showLoading({int minMillis = 500}) async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    await Future.delayed(Duration(milliseconds: minMillis));
+  }
+
+  void _hideLoading() {
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+  }
+
   void _showMediaSourceModal(BuildContext context, String mediaType) {
-    print('DEBUG: Showing media source modal for mediaType: $mediaType');
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _MediaSourceSheet(
+        mediaType: mediaType,
+        onGalleryTap: () {
+          Navigator.pop(ctx);
+          _pickFromGallery(mediaType);
+        },
+        onLibraryTap: () {
+          Navigator.pop(ctx);
+          _showLibraryModal(context, mediaType);
+        },
       ),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(16.0),
+    );
+  }
+
+  Future<void> _pickFromGallery(String mediaType) async {
+    try {
+      await _showLoading();
+      if (mediaType == 'video') {
+        final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
+        if (file != null) {
+          if (!file.path.toLowerCase().endsWith('.mp4')) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Only MP4 videos are allowed.')),
+              );
+            }
+            _hideLoading();
+            return;
+          }
+          if (mounted) {
+            final postData = <String, String?>{
+              'filePath': file.path,
+              'mediaId': null,
+              'title': file.name,
+            };
+            // Push editor while loading overlay is still on
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              context.push('/post-video-editor', extra: postData).then((_) => _hideLoading());
+            });
+            return;
+          }
+        }
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['mp3'],
+        );
+        if (result != null && result.files.single.path != null && mounted) {
+          final postData = <String, String?>{
+            'filePath': result.files.single.path!,
+            'mediaId': null,
+            'title': result.files.single.name,
+          };
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            context.push('/post-audio-editor', extra: postData).then((_) => _hideLoading());
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking $mediaType: $e')),
+        );
+      }
+    } finally {
+      // If we didn’t navigate, make sure to hide
+      if (mounted) _hideLoading();
+    }
+  }
+
+  Future<String?> _downloadMediaFile(String url) async {
+    try {
+      final localPath = await _postRemoteDataSource.downloadFile(url);
+      return localPath;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to download media: $e')),
+        );
+      }
+      return null;
+    }
+  }
+
+  void _showLibraryModal(BuildContext context, String mediaType) {
+    context.read<DownloadsBloc>().add(GetDownloadsEvent(mediaType: mediaType));
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (_, controller) => _LibrarySheet(
+          mediaType: mediaType,
+          scrollController: controller,
+          onMediaSelected: (download) async {
+            if (download.mediaFile == null || !mounted) return;
+
+            // start overlay immediately and keep it until after navigation completes
+            await _showLoading();
+
+            String? localPath = download.mediaFile;
+            if (download.mediaFile!.startsWith('http')) {
+              localPath = await _downloadMediaFile(download.mediaFile!);
+              if (localPath == null) {
+                _hideLoading();
+                Navigator.pop(modalContext);
+                return;
+              }
+            }
+
+            final postData = <String, String?>{
+              'filePath': localPath,
+              'mediaId': download.id,
+              'title': download.title,
+            };
+            final route = mediaType == 'video' ? '/post-video-editor' : '/post-audio-editor';
+
+            // Close modal, then navigate; keep loading visible until push() resolves
+            Navigator.pop(modalContext);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              context.push(route, extra: postData).then((_) => _hideLoading());
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: appTheme.scaffoldBackgroundColor,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            title: Text(
+              'Post My Feed',
+              style: appTheme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          body: Center(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.post_add_rounded,
+                      size: 80,
+                      color: appTheme.primaryColor,
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Create a New Post',
+                      style: appTheme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                        fontSize: 26,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Choose video or audio to share with your audience',
+                      style: appTheme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 48),
+                    _PostOptionCard(
+                      title: 'Video Post',
+                      subtitle: 'Share a video from your gallery or library',
+                      iconData: Icons.videocam,
+                      gradientColors: [appTheme.primaryColor, appTheme.primaryColor.withOpacity(0.7)],
+                      onTap: () => _showMediaSourceModal(context, 'video'),
+                    ),
+                    const SizedBox(height: 20),
+                    _PostOptionCard(
+                      title: 'Audio Post',
+                      subtitle: 'Share an audio clip from your files or library',
+                      iconData: Icons.audiotrack,
+                      gradientColors: const [Color(0xFF00B4DB), Color(0xFF0083B0)],
+                      onTap: () => _showMediaSourceModal(context, 'audio'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_isLoading) const ModalBarrier(dismissible: false, color: Colors.black54),
+        if (_isLoading) const Center(child: CircularProgressIndicator(color: Colors.white)),
+      ],
+    );
+  }
+}
+
+class _PostOptionCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData iconData;
+  final List<Color> gradientColors;
+  final VoidCallback onTap;
+
+  const _PostOptionCard({
+    required this.title,
+    required this.subtitle,
+    required this.iconData,
+    required this.gradientColors,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: gradientColors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: gradientColors.first.withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Row(
+            children: [
+              Icon(iconData, size: 40, color: Colors.white),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.9)),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MediaSourceSheet extends StatelessWidget {
+  final String mediaType;
+  final VoidCallback onGalleryTap;
+  final VoidCallback onLibraryTap;
+
+  const _MediaSourceSheet({
+    required this.mediaType,
+    required this.onGalleryTap,
+    required this.onLibraryTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text('Choose Source', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18)),
+            const SizedBox(height: 16),
             ListTile(
-              leading: const Icon(Icons.photo_library),
+              leading: Icon(Icons.photo_library_rounded, color: appTheme.primaryColor),
               title: const Text('From Gallery'),
-              onTap: () {
-                print('DEBUG: User selected "From Gallery" for $mediaType');
-                Navigator.pop(context);
-                _pickFromGallery(mediaType);
-              },
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onTap: onGalleryTap,
             ),
             ListTile(
-              leading: const Icon(Icons.library_music),
-              title: const Text('From Library'),
-              onTap: () {
-                print('DEBUG: User selected "From Library" for $mediaType');
-                Navigator.pop(context);
-                _showLibraryModal(context, mediaType);
-              },
+              leading: Icon(Icons.video_library_rounded, color: appTheme.primaryColor),
+              title: const Text('From My Library'),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onTap: onLibraryTap,
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  // Pick media from gallery using image_picker
-  Future<void> _pickFromGallery(String mediaType) async {
-    print('DEBUG: Picking $mediaType from gallery');
-    try {
-      if (mediaType == 'video') {
-        final XFile? file = await _picker.pickVideo(source: ImageSource.gallery);
-        if (file != null && mounted) {
-          final filePath = file.path;
-          print('DEBUG: Video selected from gallery, filePath: $filePath');
-          context.push('/video-post', extra: {'filePath': filePath});
-        } else {
-          print('DEBUG: No video selected from gallery');
-        }
-      } else {
-        final result = await FilePicker.platform.pickFiles(type: FileType.audio);
-        if (result != null && result.files.single.path != null && mounted) {
-          final filePath = result.files.single.path!;
-          print('DEBUG: Audio selected from gallery, filePath: $filePath');
-          context.push('/audio-post', extra: {'filePath': filePath});
-        } else {
-          print('DEBUG: No audio selected from gallery');
-        }
-      }
-    } catch (e) {
-      print('DEBUG: Error picking $mediaType from gallery: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error picking $mediaType: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
+class _LibrarySheet extends StatelessWidget {
+  final String mediaType;
+  final ScrollController scrollController;
+  final Function(DownloadEntity) onMediaSelected;
 
-  // Show library modal with media list fetched from API
-  void _showLibraryModal(BuildContext context, String mediaType) {
-    print('DEBUG: Showing library modal for mediaType: $mediaType');
-    try {
-      context.read<DownloadsBloc>().add(GetDownloadsEvent(mediaType: mediaType));
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        builder: (modalContext) => DraggableScrollableSheet(
-          initialChildSize: 0.9,
-          minChildSize: 0.5,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (_, controller) => Scaffold(
-            appBar: AppBar(
-              title: Text('${mediaType == 'video' ? 'Videos' : 'Audios'} Library'),
-              backgroundColor: Colors.white,
-              elevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.close, color: Colors.black),
-                onPressed: () {
-                  print('DEBUG: Closing library modal');
-                  Navigator.pop(modalContext);
-                },
-              ),
-            ),
-            body: BlocBuilder<DownloadsBloc, DownloadsState>(
-              builder: (context, state) {
-                if (state is DownloadsInitial || state is DownloadsLoading) {
-                  print('DEBUG: Downloads state: Loading for $mediaType');
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (state is DownloadsError) {
-                  print('DEBUG: Downloads state: Error for $mediaType - ${state.message}');
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('Failed to load $mediaType: ${state.message}'),
-                        const SizedBox(height: 10),
-                        ElevatedButton(
-                          onPressed: () {
-                            print('DEBUG: Retrying downloads for $mediaType');
-                            context
-                                .read<DownloadsBloc>()
-                                .add(GetDownloadsEvent(mediaType: mediaType));
-                          },
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                if (state is DownloadsLoaded) {
-                  print('DEBUG: Downloads state: Loaded ${state.downloads.length} items for $mediaType');
-                  if (state.downloads.isEmpty) {
-                    print('DEBUG: No $mediaType found in library');
-                    return Center(child: Text('No $mediaType found'));
-                  }
-                  return ListView.builder(
-                    controller: controller,
-                    padding: const EdgeInsets.all(16.0),
-                    itemCount: state.downloads.length,
-                    itemBuilder: (context, index) {
-                      final download = state.downloads[index];
-                      print('DEBUG: Rendering download item $index: ${download.title}, id: ${download.id}');
-                      return ListTile(
-                        leading: SizedBox(
-                          width: 60,
-                          height: 60,
-                          child: mediaType == 'video' &&
-                                  download.thumbnail != null &&
-                                  download.thumbnail!.isNotEmpty
-                              ? Image.network(
-                                  download.thumbnail!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    print('DEBUG: Error loading thumbnail for ${download.title}: $error');
-                                    return Image.asset('assets/images/youtubeicon.png');
-                                  },
-                                  loadingBuilder: (context, child, loadingProgress) {
-                                    if (loadingProgress == null) return child;
-                                    print('DEBUG: Loading thumbnail for ${download.title}');
-                                    return const Center(child: CircularProgressIndicator());
-                                  },
-                                )
-                              : Image.asset('assets/images/youtubeicon.png'),
-                        ),
-                        title: Text(
-                          download.title ?? 'Untitled ${mediaType == 'video' ? 'Video' : 'Audio'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          download.duration ?? 'Unknown duration',
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                        onTap: () {
-                          if (download.mediaFile != null) {
-                            print(
-                                'DEBUG: Selected library item: ${download.title}, filePath: ${download.mediaFile}, mediaId: ${download.id}');
-                            context.push(
-                              mediaType == 'video' ? '/video-post' : '/audio-post',
-                              extra: {
-                                'filePath': download.mediaFile,
-                                'mediaId': download.id,
-                              },
-                            );
-                            Navigator.pop(modalContext);
-                          } else {
-                            print('DEBUG: No media file available for ${download.title}');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('No media file available'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
-                      );
-                    },
-                  );
-                }
-                print('DEBUG: Downloads state: Unknown state for $mediaType');
-                return const Center(child: Text('Loading...'));
-              },
-            ),
-          ),
-        ),
-      );
-    } catch (e) {
-      print('DEBUG: Error accessing DownloadsBloc in _showLibraryModal: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: Unable to load library ($e)'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
+  const _LibrarySheet({
+    required this.mediaType,
+    required this.scrollController,
+    required this.onMediaSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
-    print('DEBUG: Building MainPostScreen');
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text(
-          'Post My Feed',
-          style: appTheme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
+    final title = mediaType == 'video' ? 'Videos' : 'Audios';
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '$title Library',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close_rounded, color: appTheme.primaryColor, size: 28),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: BlocBuilder<DownloadsBloc, DownloadsState>(
+              builder: (context, state) {
+                if (state is DownloadsInitial || state is DownloadsLoading) {
+                  return _buildShimmerEffect();
+                }
+                if (state is DownloadsError) {
+                  return _buildErrorState(context, state.message);
+                }
+                if (state is DownloadsLoaded) {
+                  if (state.downloads.isEmpty) return _buildEmptyState();
+                  return _buildLibraryList(context, state.downloads);
+                }
+                return _buildShimmerEffect();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLibraryList(BuildContext context, List<DownloadEntity> downloads) {
+    return ListView.builder(
+      controller: scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      itemCount: downloads.length,
+      itemBuilder: (context, index) {
+        final download = downloads[index];
+        return GestureDetector(
+          onTap: () => onMediaSelected(download),
+          child: Card(
+            elevation: 4,
+            margin: const EdgeInsets.only(bottom: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                children: [
+                  _buildThumb(download),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          download.title ?? 'Untitled',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(download.duration ?? ''),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildThumb(DownloadEntity d) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 80,
+        height: 80,
+        color: Colors.grey.shade200,
+        child: mediaType == 'video' && d.thumbnail != null
+            ? Image.network(d.thumbnail!, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.error))
+            : Icon(mediaType == 'video' ? Icons.videocam : Icons.music_note),
+      ),
+    );
+  }
+
+  Widget _buildShimmerEffect() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: ListView.builder(
+        itemCount: 8,
+        padding: const EdgeInsets.all(16.0),
+        itemBuilder: (_, __) => Padding(
+          padding: const EdgeInsets.only(bottom: 16.0),
+          child: Row(
+            children: [
+              Container(width: 80, height: 80, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(width: double.infinity, height: 18.0, color: Colors.white),
+                    const SizedBox(height: 8),
+                    Container(width: 140.0, height: 14.0, color: Colors.white),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 200,
-              child: ElevatedButton(
-                onPressed: () {
-                  print('DEBUG: Video Post button pressed');
-                  _showMediaSourceModal(context, 'video');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: appTheme.primaryColor,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Video Post',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Audio Post button (uncomment if needed)
-            
-            SizedBox(
-              width: 200,
-              child: ElevatedButton(
-                onPressed: () {
-                  print('DEBUG: Audio Post button pressed');
-                  _showMediaSourceModal(context, 'audio');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: appTheme.primaryColor,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Audio Post',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-            ),
-            
-          ],
-        ),
+    );
+  }
+
+  Widget _buildErrorState(BuildContext context, String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.cloud_off, size: 90, color: Colors.grey),
+          const SizedBox(height: 20),
+          const Text('Something Went Wrong'),
+          Text(message),
+          ElevatedButton(
+            onPressed: () => context.read<DownloadsBloc>().add(GetDownloadsEvent(mediaType: mediaType)),
+            child: const Text('Try Again'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(mediaType == 'video' ? Icons.video_library : Icons.audiotrack, size: 90, color: Colors.grey),
+          const SizedBox(height: 20),
+          Text('Library is Empty'),
+          Text('You have not downloaded any $mediaType yet.'),
+        ],
       ),
     );
   }

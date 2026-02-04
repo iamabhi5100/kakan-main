@@ -99,7 +99,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
     }
     try {
       final sessionManager = di.sl<SessionManager>();
-      final userId = await sessionManager.getUserId();
+      final userId = await sessionManager.getProfileId();
       if (userId == null) {
         if (mounted) {
           if (kDebugMode) {
@@ -213,7 +213,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
           _profileImageUrl = null;
         });
         final sessionManager = di.sl<SessionManager>();
-        final userId = await sessionManager.getUserId();
+        final userId = await sessionManager.getProfileId();
         if (userId == null) {
           if (mounted) {
             if (kDebugMode) {
@@ -303,7 +303,12 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                   if (kDebugMode) {
                     print('UpdateProfileScreen: Back button pressed');
                   }
-                  Navigator.pop(context);
+                  // NEW: Check if can pop; if not, navigate to /home
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  } else {
+                    context.go('/home');
+                  }
                 },
               ),
               title: const Text('Edit Profile'),
@@ -701,9 +706,10 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                               key: const ValueKey('email'),
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
+                              enabled: false,
                               decoration: const InputDecoration(
                                 border: OutlineInputBorder(),
-                                hintText: 'Enter email',
+                                hintText: 'Email',
                               ),
                             ),
                             if (kDebugMode) Text('Debug: ${_emailController.text}'),
@@ -773,7 +779,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                                         }
                                         try {
                                           final sessionManager = di.sl<SessionManager>();
-                                          final userId = await sessionManager.getUserId();
+                                          final userId = await sessionManager.getProfileId();
                                           if (userId == null) {
                                             if (mounted) {
                                               if (kDebugMode) {

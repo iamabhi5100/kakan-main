@@ -23,7 +23,7 @@ class ChatItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String baseUrl = 'https://kakan.backend.xade.in';
+    final String baseUrl = 'https://staging.api.kakan.co';
 
     return Padding(
       padding: const EdgeInsets.all(8.0),

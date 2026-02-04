@@ -1,3 +1,4 @@
+// lib/features/youtube/presentation/bloc/youtube_event.dart
 import 'package:equatable/equatable.dart';
 
 abstract class YoutubeEvent extends Equatable {
@@ -18,7 +19,7 @@ class DownloadVideoEvent extends YoutubeEvent {
   final String videoId;
   final String title;
   final bool isAudioOnly;
-  final String? preferredQuality; // Add preferredQuality
+  final String? preferredQuality;
 
   DownloadVideoEvent({
     required this.videoId,

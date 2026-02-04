@@ -1,4 +1,3 @@
-import 'package:kakan/features/home/data/models/feed_model.dart';
 import 'package:kakan/features/home/model/entities/feed_entity.dart';
 
 class ProfilePostEntity {
@@ -11,8 +10,10 @@ class ProfilePostEntity {
   final String created;
   final int likesCount;
   final int repostCount;
+  final int commentsCount; // New field
   final bool flagLiked;
-  final String userId; // Added for fetching user details
+  final bool flagOwnPost; // New field
+  final String userId;
   final UserProfileDetails userProfileDetails;
 
   ProfilePostEntity({
@@ -25,7 +26,9 @@ class ProfilePostEntity {
     required this.created,
     required this.likesCount,
     required this.repostCount,
+    required this.commentsCount, // Added to constructor
     required this.flagLiked,
+    required this.flagOwnPost, // Added to constructor
     required this.userId,
     required this.userProfileDetails,
   });

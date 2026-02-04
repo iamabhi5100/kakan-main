@@ -1,3 +1,4 @@
+// lib/features/search/presentation/song_content_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:just_audio/just_audio.dart';
@@ -65,7 +66,8 @@ class _SongContentScreenState extends State<SongContentScreen> {
                   autoCloseDuration: const Duration(seconds: 3),
                 );
                 if (state.newPostId != null) {
-                  context.read<FeedBloc>().add(GetFeedEvent());
+                  // CHANGED: GetFeedEvent -> RefreshFeedsEvent
+                  context.read<FeedBloc>().add(const RefreshFeedsEvent());
                 }
               }
             } else if (state is FeedActionError) {
@@ -221,8 +223,7 @@ class _SongContentScreenState extends State<SongContentScreen> {
                                       activeColor: Colors.black,
                                       inactiveColor: Colors.grey[400],
                                       onChanged: (ms) {
-                                        _player
-                                            .seek(Duration(milliseconds: ms.round()));
+                                        _player.seek(Duration(milliseconds: ms.round()));
                                       },
                                     );
                                   },
@@ -231,8 +232,7 @@ class _SongContentScreenState extends State<SongContentScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.volume_up,
-                                color: Colors.black54),
+                            icon: const Icon(Icons.volume_up, color: Colors.black54),
                             onPressed: () {},
                           ),
                         ],
@@ -250,8 +250,7 @@ class _SongContentScreenState extends State<SongContentScreen> {
                             builder: (_, snap) {
                               return Text(
                                 _formatDuration(snap.data ?? Duration.zero),
-                                style: const TextStyle(
-                                    color: Colors.grey, fontSize: 12),
+                                style: const TextStyle(color: Colors.grey, fontSize: 12),
                               );
                             },
                           ),
@@ -260,8 +259,7 @@ class _SongContentScreenState extends State<SongContentScreen> {
                             builder: (_, snap) {
                               return Text(
                                 _formatDuration(snap.data ?? Duration.zero),
-                                style: const TextStyle(
-                                    color: Colors.grey, fontSize: 12),
+                                style: const TextStyle(color: Colors.grey, fontSize: 12),
                               );
                             },
                           ),
@@ -280,9 +278,7 @@ class _SongContentScreenState extends State<SongContentScreen> {
                             children: [
                               IconButton(
                                 icon: Icon(
-                                  _flagLiked
-                                      ? Icons.favorite
-                                      : Icons.favorite_border,
+                                  _flagLiked ? Icons.favorite : Icons.favorite_border,
                                   color: _flagLiked ? Colors.red : Colors.black,
                                 ),
                                 onPressed: () {
@@ -295,53 +291,35 @@ class _SongContentScreenState extends State<SongContentScreen> {
                                       .add(LikeDislikePostEvent(postId: meta.id));
                                 },
                               ),
-                              Text('$_likes Likes',
-                                  style: const TextStyle(fontSize: 13)),
+                              Text('$_likes Likes', style: const TextStyle(fontSize: 13)),
                             ],
                           ),
                           const SizedBox(width: 16),
                           Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.repeat,
-                                    color: Colors.green),
+                                icon: const Icon(Icons.repeat, color: Colors.green),
                                 onPressed: () async {
                                   final TextEditingController titleController =
-                                      TextEditingController(
-                                          text:
-                                              '${meta.name ?? 'Repost'} (Repost)');
+                                      TextEditingController(text: '${meta.name ?? 'Repost'} (Repost)');
                                   final TextEditingController captionController =
                                       TextEditingController(text: meta.description);
 
-                                  final result =
-                                      await showDialog<Map<String, String>>(
+                                  final result = await showDialog<Map<String, String>>(
                                     context: context,
                                     builder: (dialogContext) => AlertDialog(
                                       title: const Text('Repost'),
                                       content: Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          TextField(
-                                            controller: titleController,
-                                            decoration: const InputDecoration(
-                                                labelText: 'Title'),
-                                          ),
-                                          TextField(
-                                            controller: captionController,
-                                            decoration: const InputDecoration(
-                                                labelText: 'Caption'),
-                                          ),
+                                          TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Title')),
+                                          TextField(controller: captionController, decoration: const InputDecoration(labelText: 'Caption')),
                                         ],
                                       ),
                                       actions: [
+                                        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
                                         TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(dialogContext),
-                                          child: const Text('Cancel'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(
-                                              dialogContext, {
+                                          onPressed: () => Navigator.pop(dialogContext, {
                                             'title': titleController.text,
                                             'caption': captionController.text,
                                           }),
@@ -353,15 +331,16 @@ class _SongContentScreenState extends State<SongContentScreen> {
 
                                   if (result != null && mounted) {
                                     providerContext.read<FeedBloc>().add(
-                                        RepostEvent(
-                                            postId: meta.id,
-                                            title: result['title']!,
-                                            caption: result['caption']!));
+                                      RepostEvent(
+                                        postId: meta.id,
+                                        title: result['title']!,
+                                        caption: result['caption']!,
+                                      ),
+                                    );
                                   }
                                 },
                               ),
-                              Text('$_reposts Reposts',
-                                  style: const TextStyle(fontSize: 13)),
+                              Text('$_reposts Reposts', style: const TextStyle(fontSize: 13)),
                             ],
                           ),
                           const Spacer(),
@@ -372,8 +351,7 @@ class _SongContentScreenState extends State<SongContentScreen> {
                                 context: context,
                                 isScrollControlled: true,
                                 shape: const RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.vertical(top: Radius.circular(20)),
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                                 ),
                                 builder: (context) => ShareScreen(
                                   mediaFile: meta.mediaFile,
@@ -400,8 +378,7 @@ class _SongContentScreenState extends State<SongContentScreen> {
 
                     // Timestamp
                     Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8),
                       child: Text(
                         meta.created ?? '',
                         style: const TextStyle(fontSize: 12, color: Colors.grey),

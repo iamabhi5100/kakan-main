@@ -1,45 +1,83 @@
 import 'package:just_audio/just_audio.dart';
 import 'package:video_player/video_player.dart';
 
+/// Coordinates media so only one (audio OR video) can play at a time.
+/// Also lets the feed pause playback when the playing cell is completely
+/// out of view.
 class MediaManager {
-  static final MediaManager _instance = MediaManager._internal();
-  factory MediaManager() => _instance;
-  MediaManager._internal();
+  MediaManager._();
+  static final MediaManager _i = MediaManager._();
+  factory MediaManager() => _i;
 
-  VideoPlayerController? _videoController;
-  AudioPlayer? _audioPlayer;
+  VideoPlayerController? _video;
+  AudioPlayer? _audio;
+  String? _ownerId; // feed id of the item currently "owning" playback
 
-  void setVideoController(VideoPlayerController controller) {
-    // Pause any playing audio or video
-    pauseMedia();
-    _videoController = controller;
+  String? get currentOwnerId => _ownerId;
+
+  /// Ensure only this video plays (pause any audio/video first).
+  void requestVideoPlay(String feedId, VideoPlayerController controller) {
+    if (_video == controller && _ownerId == feedId) return;
+    pauseAll();
+    _video = controller;
+    _audio = null;
+    _ownerId = feedId;
+    controller.play();
   }
 
-  void setAudioPlayer(AudioPlayer player) {
-    // Pause any playing audio or video
-    pauseMedia();
-    _audioPlayer = player;
+  /// Ensure only this audio plays (pause any audio/video first).
+  void requestAudioPlay(String feedId, AudioPlayer player) {
+    if (_audio == player && _ownerId == feedId) return;
+    pauseAll();
+    _audio = player;
+    _video = null;
+    _ownerId = feedId;
+    player.play();
   }
 
-  void playMedia() {
-    if (_videoController != null && !_videoController!.value.isPlaying) {
-      _audioPlayer?.pause();
-      _videoController!.play();
-    } else if (_audioPlayer != null && !_audioPlayer!.playing) {
-      _videoController?.pause();
-      _audioPlayer!.play();
+  /// Convenience toggles — if already owner, toggle play/pause; otherwise
+  /// claim ownership and start.
+  void toggleVideo(String feedId, VideoPlayerController controller) {
+    if (_ownerId == feedId && _video == controller) {
+      controller.value.isPlaying ? controller.pause() : controller.play();
+    } else {
+      requestVideoPlay(feedId, controller);
     }
   }
 
-  void pauseMedia() {
-    _videoController?.pause();
-    _audioPlayer?.pause();
+  Future<void> toggleAudio(String feedId, AudioPlayer player) async {
+    if (_ownerId == feedId && _audio == player) {
+      player.playing ? await player.pause() : await player.play();
+    } else {
+      requestAudioPlay(feedId, player);
+    }
   }
 
+  /// Pause whatever is playing.
+  void pauseAll() {
+    try { _video?.pause(); } catch (_) {}
+    try { _audio?.pause(); } catch (_) {}
+  }
+
+  /// Pause if the owner matches (used when the owner scrolled off-screen).
+  void pauseIfOwner(String feedId) {
+    if (_ownerId == feedId) pauseAll();
+  }
+
+  /// Clear pointers when an owning widget is disposed.
+  void clearIfOwnerDisposed(String feedId, {bool isVideo = false}) {
+    if (_ownerId == feedId) {
+      _ownerId = null;
+      if (isVideo) _video = null; else _audio = null;
+    }
+  }
+
+  /// App-wide cleanup (e.g., on logout).
   void disposeMedia() {
-    _videoController?.dispose();
-    _audioPlayer?.dispose();
-    _videoController = null;
-    _audioPlayer = null;
+    try { _video?.dispose(); } catch (_) {}
+    try { _audio?.dispose(); } catch (_) {}
+    _video = null;
+    _audio = null;
+    _ownerId = null;
   }
 }

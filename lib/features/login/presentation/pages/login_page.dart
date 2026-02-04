@@ -9,6 +9,9 @@ import 'package:kakan/features/login/presentation/widgets/login_form.dart';
 import 'package:kakan/injection_container.dart' as di;
 import 'package:fluttertoast/fluttertoast.dart';
 
+// ⬇️ ADD THIS IMPORT
+import 'package:kakan/core/widgets/error_screen.dart';
+
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
 
@@ -59,15 +62,16 @@ class LoginPage extends StatelessWidget {
                 print('Navigation error: $e');
               }
             } else if (state is OtpFailure) {
-              print('OTP Failure: ${state.message}');
-              Fluttertoast.showToast(
-                msg: state.message,
-                toastLength: Toast.LENGTH_LONG,
-                gravity: ToastGravity.BOTTOM,
-                backgroundColor: Colors.red,
-                textColor: Colors.white,
-                fontSize: 16.0,
-              );
+              // ⬇️ Show the full-screen error instead of a snackbar
+              Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => ErrorScreen(
+                  type: state.type,
+                  onRetry: () {
+                    Navigator.of(context).pop(); // Close error screen
+                    // User can tap "Get OTP" again.
+                  },
+                ),
+              ));
             }
           },
           child: const LoginForm(),

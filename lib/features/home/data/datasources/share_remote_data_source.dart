@@ -5,6 +5,8 @@ import 'package:kakan/core/error/exceptions.dart';
 import 'package:kakan/core/network/api_service.dart';
 import 'package:kakan/features/home/data/models/share_models.dart';
 import 'package:kakan/injection_container.dart' as di;
+import 'package:http_parser/http_parser.dart';
+import 'dart:io';
 
 abstract class ShareRemoteDataSource {
   Future<List<ShareItem>> getUsersToShare();
@@ -68,18 +70,35 @@ class ShareRemoteDataSourceImpl implements ShareRemoteDataSource {
       });
 
       if (mediaFileUrl != null && mediaFileUrl.isNotEmpty) {
-        final response = await _dio.get(
-          mediaFileUrl,
-          options: Options(responseType: ResponseType.bytes),
-        );
-        final fileName = mediaFileUrl.split('/').last;
-        formData.files.add(MapEntry(
-          'media_file',
-          MultipartFile.fromBytes(
-            response.data as List<int>,
-            filename: fileName,
-          ),
-        ));
+        // Check if mediaFileUrl is a local file path
+        final isLocalFile = File(mediaFileUrl).existsSync();
+        if (isLocalFile) {
+          final fileExtension = messageType == 'video' ? 'mp4' : 'mp3';
+          final mimeType = messageType == 'video' ? MediaType('video', 'mp4') : MediaType('audio', 'mp3');
+          formData.files.add(MapEntry(
+            'media_file',
+            await MultipartFile.fromFile(
+              mediaFileUrl,
+              filename: 'shared_${messageType}_${DateTime.now().millisecondsSinceEpoch}.$fileExtension',
+              contentType: mimeType,
+            ),
+          ));
+        } else {
+          // Handle remote URL
+          final response = await _dio.get(
+            mediaFileUrl,
+            options: Options(responseType: ResponseType.bytes),
+          );
+          final fileName = mediaFileUrl.split('/').last;
+          formData.files.add(MapEntry(
+            'media_file',
+            MultipartFile.fromBytes(
+              response.data as List<int>,
+              filename: fileName,
+              contentType: MediaType(messageType, fileName.split('.').last),
+            ),
+          ));
+        }
       }
 
       final endpoint = type == 'user'

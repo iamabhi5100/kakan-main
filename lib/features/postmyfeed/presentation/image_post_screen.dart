@@ -3,20 +3,18 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:video_player/video_player.dart';
 
-// ---- your DI + bloc contracts (from old code) ----
 import 'package:kakan/injection_container.dart' as di;
 import 'package:kakan/features/postmyfeed/presentation/bloc/post_bloc/post_bloc.dart';
 import 'package:kakan/features/postmyfeed/presentation/bloc/post_bloc/post_event.dart';
 import 'package:kakan/features/postmyfeed/presentation/bloc/post_bloc/post_state.dart';
 
-class VideoPostScreen extends StatefulWidget {
-  final String filePath;      // safe transcoded path (required)
-  final String? mediaId;      // optional
-  final String? title;        // optional (prefill)
+class ImagePostScreen extends StatefulWidget {
+  final String filePath;
+  final String? mediaId;
+  final String? title;
 
-  const VideoPostScreen({
+  const ImagePostScreen({
     super.key,
     required this.filePath,
     this.mediaId,
@@ -24,43 +22,31 @@ class VideoPostScreen extends StatefulWidget {
   });
 
   @override
-  State<VideoPostScreen> createState() => _VideoPostScreenState();
+  State<ImagePostScreen> createState() => _ImagePostScreenState();
 }
 
-class _VideoPostScreenState extends State<VideoPostScreen> {
-  // --- Dark theme palette (matches your editor screen vibes) ---
-  static const Color _bg       = Color(0xFF0F1115);
-  static const Color _card     = Color(0xFF171A20);
-  static const Color _muted    = Color(0xFF9AA4B2);
-  static const Color _text     = Color(0xFFE6EAF2);
-  static const Color _accent   = Color(0xFF00E5A8);
-  static const Color _accent2  = Color(0xFF4C82FB);
-  static const Color _fieldBg  = Color(0xFF141821);
-  static const Color _border   = Color(0xFF2A3242);
-  static const Color _overlay  = Color(0x88000000);
+class _ImagePostScreenState extends State<ImagePostScreen> {
+  static const Color _bg = Color(0xFF0F1115);
+  static const Color _card = Color(0xFF171A20);
+  static const Color _muted = Color(0xFF9AA4B2);
+  static const Color _text = Color(0xFFE6EAF2);
+  static const Color _accent = Color(0xFF00E5A8);
+  static const Color _fieldBg = Color(0xFF141821);
+  static const Color _border = Color(0xFF2A3242);
+  static const Color _overlay = Color(0x88000000);
 
   late final TextEditingController _title;
   final TextEditingController _caption = TextEditingController();
-  late final VideoPlayerController _vp;
-
-  bool _videoReady = false;
-  String _shareTo = 'all'; // 'all' | 'followers'
+  String _shareTo = 'all';
 
   @override
   void initState() {
     super.initState();
     _title = TextEditingController(text: widget.title ?? '');
-    _vp = VideoPlayerController.file(File(widget.filePath))
-      ..setLooping(true)
-      ..initialize().then((_) {
-        if (!mounted) return;
-        setState(() => _videoReady = true);
-      });
   }
 
   @override
   void dispose() {
-    _vp.dispose();
     _title.dispose();
     _caption.dispose();
     super.dispose();
@@ -72,7 +58,6 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
       scaffoldBackgroundColor: _bg,
       colorScheme: const ColorScheme.dark(
         primary: _accent,
-        secondary: _accent2,
         surface: _card,
         background: _bg,
       ),
@@ -103,7 +88,6 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
           borderSide: const BorderSide(color: _accent),
           borderRadius: BorderRadius.circular(12),
         ),
-        counterStyle: const TextStyle(color: _muted),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -119,12 +103,8 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
         backgroundColor: const Color(0xFF141821),
         selectedColor: const Color(0xFF1E2430),
         labelStyle: const TextStyle(color: _text, fontWeight: FontWeight.w600),
-        secondaryLabelStyle: const TextStyle(color: _text),
         side: const BorderSide(color: _border),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: _accent,
       ),
     );
   }
@@ -141,19 +121,21 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
     FocusScope.of(context).unfocus();
     context.read<PostBloc>().add(
           CreatePostEvent(
-            mediaType: 'video',
+            mediaType: 'image',
             title: _title.text.trim(),
-            caption:
-                _caption.text.trim().isEmpty ? null : _caption.text.trim(),
-            mediaFilePath: widget.filePath, // local file path
-            mediaId: widget.mediaId,       // optional
-            shareTo: _shareTo,             // 'all' | 'followers'
+            caption: _caption.text.trim().isEmpty ? null : _caption.text.trim(),
+            mediaFilePath: widget.filePath,
+            mediaId: widget.mediaId,
+            shareTo: _shareTo,
           ),
         );
   }
 
   @override
   Widget build(BuildContext context) {
+    final file = File(widget.filePath);
+    final imageExists = file.existsSync();
+
     return Theme(
       data: _theme(context),
       child: BlocProvider(
@@ -166,45 +148,22 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
               );
               context.go('/home');
             } else if (state is PostError) {
-              var msg = state.message;
-              if (msg.contains('Media file is required')) {
-                msg = 'Media file is required. Please select a valid video.';
-              }
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Failed to post: $msg')),
+                SnackBar(content: Text('Failed to post: ${state.message}')),
               );
             }
           },
           child: Scaffold(
-            appBar: AppBar(
-              title: const Text('New Post'),
-              actions: [
-                IconButton(
-                  onPressed: !_videoReady
-                      ? null
-                      : () => setState(() {
-                            if (_vp.value.isPlaying) {
-                              _vp.pause();
-                            } else {
-                              _vp.play();
-                            }
-                          }),
-                  icon: Icon(_vp.value.isPlaying ? Icons.pause : Icons.play_arrow),
-                  tooltip: _vp.value.isPlaying ? 'Pause' : 'Play',
-                ),
-                const SizedBox(width: 4),
-              ],
-            ),
+            appBar: AppBar(title: const Text('New Post')),
             body: BlocBuilder<PostBloc, PostState>(
               builder: (context, state) {
                 final isLoading = state is PostLoading;
-
                 return Stack(
                   children: [
                     ListView(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                       children: [
-                        // Video Preview Card
+                        // Image Preview
                         Container(
                           decoration: BoxDecoration(
                             color: _card,
@@ -220,70 +179,26 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
                           ),
                           clipBehavior: Clip.antiAlias,
                           child: AspectRatio(
-                            aspectRatio: _videoReady
-                                ? _vp.value.aspectRatio
-                                : 16 / 9,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                _videoReady
-                                    ? VideoPlayer(_vp)
-                                    : const ColoredBox(color: Color(0x11000000)),
-                                // Play/Pause Overlay
-                                AnimatedOpacity(
-                                  opacity: _videoReady && !_vp.value.isPlaying ? 1.0 : 0.0,
-                                  duration: const Duration(milliseconds: 200),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(.35),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: IconButton(
-                                      iconSize: 64,
-                                      color: Colors.white,
-                                      icon: const Icon(Icons.play_arrow_rounded),
-                                      onPressed: () {
-                                        setState(() => _vp.play());
-                                      },
-                                    ),
+                            aspectRatio: 1,
+                            child: imageExists
+                                ? Image.file(file, fit: BoxFit.cover)
+                                : const Center(
+                                    child: Icon(Icons.broken_image, color: _muted, size: 48),
                                   ),
-                                ),
-                                if (!_videoReady)
-                                  const Positioned.fill(
-                                    child: ColoredBox(
-                                      color: Color(0x33000000),
-                                      child: Center(child: CircularProgressIndicator()),
-                                    ),
-                                  ),
-                                if (isLoading)
-                                  const Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    child: LinearProgressIndicator(minHeight: 4),
-                                  ),
-                              ],
-                            ),
                           ),
                         ),
-
                         const SizedBox(height: 16),
-
-                        // Title
                         TextField(
                           controller: _title,
                           maxLength: 50,
                           style: const TextStyle(color: _text, fontWeight: FontWeight.w600),
                           decoration: const InputDecoration(
                             labelText: 'Title*',
-                            hintText: 'Give your video a short title',
+                            hintText: 'Give your photo a short title',
                           ),
                           onChanged: (_) => setState(() {}),
                         ),
-
                         const SizedBox(height: 12),
-
-                        // Caption
                         TextField(
                           controller: _caption,
                           maxLength: 500,
@@ -291,26 +206,13 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
                           style: const TextStyle(color: _text),
                           decoration: const InputDecoration(
                             labelText: 'Caption (Optional)',
-                            hintText: 'Describe your post, add tags or mentions…',
+                            hintText: 'Describe your post…',
                           ),
                         ),
-
                         const SizedBox(height: 12),
-
-                        // Visibility (share to)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Visibility',
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                      color: _muted,
-                                      fontWeight: FontWeight.w600,
-                                    )),
-                            Text(
-                              _shareTo == 'all' ? 'Public' : 'Followers',
-                              style: const TextStyle(color: _text, fontWeight: FontWeight.w700),
-                            ),
-                          ],
+                        const Text(
+                          'Visibility',
+                          style: TextStyle(color: _muted, fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -318,20 +220,18 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
                           runSpacing: 8,
                           children: [
                             ChoiceChip(
-                              label: const Text('All'),
+                              label: const Text('Public'),
                               selected: _shareTo == 'all',
-                              selectedColor: const Color(0xFF1E2430),
-                              onSelected: (v) => setState(() => _shareTo = 'all'),
+                              onSelected: (_) => setState(() => _shareTo = 'all'),
                               side: BorderSide(
                                 color: _shareTo == 'all' ? _accent : _border,
                                 width: _shareTo == 'all' ? 1.4 : 1.0,
                               ),
                             ),
                             ChoiceChip(
-                              label: const Text('My Followers'),
+                              label: const Text('Followers'),
                               selected: _shareTo == 'followers',
-                              selectedColor: const Color(0xFF1E2430),
-                              onSelected: (v) => setState(() => _shareTo = 'followers'),
+                              onSelected: (_) => setState(() => _shareTo = 'followers'),
                               side: BorderSide(
                                 color: _shareTo == 'followers' ? _accent : _border,
                                 width: _shareTo == 'followers' ? 1.4 : 1.0,
@@ -339,33 +239,22 @@ class _VideoPostScreenState extends State<VideoPostScreen> {
                             ),
                           ],
                         ),
-
                         const SizedBox(height: 20),
-
-                        // Share button
                         ElevatedButton.icon(
                           onPressed: _canShare(state) ? () => _onSharePressed(context) : null,
                           icon: const Icon(Icons.send_rounded),
-                          label: isLoading
-                              ? const Text('Posting…')
-                              : const Text('Share'),
+                          label: isLoading ? const Text('Posting…') : const Text('Share'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                _canShare(state) ? _accent : const Color(0xFF2D3444),
+                            backgroundColor: _canShare(state) ? _accent : const Color(0xFF2D3444),
                             foregroundColor: _bg,
                           ),
                         ),
                       ],
                     ),
-
-                    // Fullscreen overlay while loading but before progress appears
                     if (isLoading)
                       const Positioned.fill(
                         child: IgnorePointer(
-                          ignoring: true,
-                          child: ColoredBox(
-                            color: _overlay,
-                          ),
+                          child: ColoredBox(color: _overlay),
                         ),
                       ),
                   ],

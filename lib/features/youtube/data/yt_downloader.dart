@@ -90,6 +90,9 @@ class YtDownloader {
     // ---- details() with resilient fallbacks
     final root = await _getDetailsResilient(id);
 
+    // ---- detect region restriction early and fail with clear message
+    _throwIfRegionRestricted(root);
+
     // ---- candidate extraction
     final muxed = _collectMuxedMp4Candidates(root);
     final videoOnly = _collectVideoOnlyMp4H264(root);
@@ -99,6 +102,7 @@ class YtDownloader {
     if (muxed.isEmpty && videoOnly.isEmpty && audioOnlyList.isEmpty) {
       final alt = await _getDetailsResilient('https://www.youtube.com/watch?v=$id',
           preferUrlParam: true);
+      _throwIfRegionRestricted(alt);
       muxed.addAll(_collectMuxedMp4Candidates(alt));
       videoOnly.addAll(_collectVideoOnlyMp4H264(alt));
       audioOnlyList.addAll(_collectM4a(alt));
@@ -421,6 +425,30 @@ class YtDownloader {
           requestOptions: RequestOptions(path: 'details'),
           error: 'Unknown error',
         );
+  }
+
+  /// Throws if API response indicates region restriction.
+  void _throwIfRegionRestricted(dynamic root) {
+    if (root == null || root is! Map) return;
+    final m = root;
+    if (m['isRegionRestricted'] == true) {
+      throw Exception('This video is not available for download in your region.');
+    }
+    final videos = m['videos'];
+    if (videos is Map && videos['errorId'] == 'RegionRestricted') {
+      throw Exception('This video is not available for download in your region.');
+    }
+    final audios = m['audios'];
+    if (audios is Map && audios['errorId'] == 'RegionRestricted') {
+      throw Exception('This video is not available for download in your region.');
+    }
+    final playability = m['playabilityStatus'];
+    if (playability is Map && playability['status'] == 'UNPLAYABLE') {
+      final reason = (playability['reason'] ?? playability['errorScreen']?['message'] ?? '').toString().toLowerCase();
+      if (reason.contains('region') || reason.contains('restricted') || reason.contains('country')) {
+        throw Exception('This video is not available for download in your region.');
+      }
+    }
   }
 
   Future<dynamic> _rapidGetDetails(Map<String, String> qp) async {

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:http/http.dart' as http;
@@ -5,7 +6,9 @@ import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/core/error/exceptions.dart';
 import 'package:kakan/core/network/api_service.dart';
 import 'package:kakan/features/postmyfeed/data/models/post_model.dart';
+import 'package:kakan/features/postmyfeed/data/models/selected_media_item.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 abstract class PostRemoteDataSource {
   Future<PostModel> createPost({
@@ -16,6 +19,12 @@ abstract class PostRemoteDataSource {
     String? mediaId,
     String? thumbnailPath,
     required String shareTo,
+  });
+  Future<PostModel> createPostCarousel({
+    required String title,
+    String? caption,
+    required String shareTo,
+    required List<SelectedMediaItem> items,
   });
   Future<String> downloadFile(String url);
 }
@@ -97,6 +106,51 @@ class PostRemoteDataSourceImpl implements PostRemoteDataSource {
       }
     } catch (e) {
       print('DEBUG: Error in createPost: $e');
+      throw ServerException(message: e.toString());
+    }
+  }
+
+  @override
+  Future<PostModel> createPostCarousel({
+    required String title,
+    String? caption,
+    required String shareTo,
+    required List<SelectedMediaItem> items,
+  }) async {
+    try {
+      final mediaList = <Map<String, dynamic>>[];
+      for (var i = 0; i < items.length; i++) {
+        mediaList.add({
+          'media_type': items[i].type == 'video' ? 'video' : 'image',
+          'order': i,
+        });
+      }
+      final formData = FormData.fromMap({
+        'title': title,
+        if (caption != null) 'caption': caption,
+        'share_to': shareTo,
+        'media': jsonEncode(mediaList),
+      });
+      for (var i = 0; i < items.length; i++) {
+        final path = items[i].path;
+        final localPath = path.startsWith('http') ? await _downloadFile(path) : path;
+        formData.files.add(MapEntry(
+          'media_files',
+          await MultipartFile.fromFile(localPath, filename: p.basename(localPath)),
+        ));
+      }
+      final response = await apiService.post(
+        ConstantApi.createPost,
+        formData,
+        includeAuth: true,
+      );
+      if (response is Map<String, dynamic>) {
+        return PostModel.fromJson(response);
+      } else {
+        throw ServerException(message: 'Invalid response format');
+      }
+    } catch (e) {
+      print('DEBUG: Error in createPostCarousel: $e');
       throw ServerException(message: e.toString());
     }
   }

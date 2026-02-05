@@ -1,12 +1,24 @@
 import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_full/return_code.dart';
 
 class FFCap {
   static bool? _x264;
 
   /// Returns true if 'libx264' encoder is available in this build.
+  /// Uses a real encode probe so we never use libx264 when the build doesn't include it
+  /// (e.g. FFmpeg-Kit mobile builds without --enable-libx264).
   static Future<bool> hasX264() async {
     if (_x264 != null) return _x264!;
-    final found = await _scan('encoders', needle: 'libx264');
+    // Probe by running a minimal encode; many mobile builds list "libx264" in -encoders
+    // but fail with "Unknown encoder 'libx264'" when used.
+    final probeArgs = [
+      '-y', '-hide_banner', '-loglevel', 'error',
+      '-f', 'lavfi', '-i', 'nullsrc=d=0.1:s=64x64',
+      '-c:v', 'libx264', '-t', '0', '-f', 'null', '-',
+    ];
+    final session = await FFmpegKit.executeWithArguments(probeArgs);
+    final rc = await session.getReturnCode();
+    final found = ReturnCode.isSuccess(rc);
     _x264 = found;
     return found;
   }

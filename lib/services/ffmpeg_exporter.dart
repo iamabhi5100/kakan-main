@@ -164,6 +164,30 @@ class FFmpegExporter {
     return Duration(milliseconds: (sec * 1000).round());
   }
 
+  /// Returns video aspect ratio (width/height) from file via FFprobe.
+  /// Used for native player on Android to size the player correctly for both shorts (vertical) and regular (horizontal) videos.
+  static Future<double> getMediaAspectRatio(String inputPath) async {
+    try {
+      final probe = await FFprobeKit.getMediaInformation(inputPath);
+      final info = probe.getMediaInformation();
+      if (info == null) return 9 / 16;
+      final streams = info.getStreams() ?? [];
+      for (final s in streams) {
+        final props = s.getAllProperties();
+        if (props == null || props['codec_type'] != 'video') continue;
+        final w = props['width'];
+        final h = props['height'];
+        int width = 0;
+        int height = 0;
+        if (w is int) width = w; else if (w is num) width = w.toInt();
+        if (h is int) height = h; else if (h is num) height = h.toInt();
+        if (width > 0 && height > 0) return (width / height).clamp(0.1, 10.0);
+        break;
+      }
+    } catch (_) {}
+    return 9 / 16;
+  }
+
   /// Mali-safe export: CFR 30fps, even dims, yuv420p. Uses libx264 if available, else mpeg4.
   /// Use for upload/share to avoid green diagonal glitch on Mali/MediaTek GPUs.
   static Future<String> exportMaliSafe(
@@ -223,11 +247,38 @@ class FFmpegExporter {
       out,
     ];
 
-    final session = await FFmpegKit.executeWithArguments(cmd);
-    final rc = await session.getReturnCode();
+    var session = await FFmpegKit.executeWithArguments(cmd);
+    var rc = await session.getReturnCode();
     if (!ReturnCode.isSuccess(rc)) {
       final logs = await session.getAllLogsAsString();
-      throw Exception('Mali-safe export failed (${rc?.getValue()}):$logs');
+      final unknownX264 = logs != null &&
+          (logs.contains("Unknown encoder 'libx264'") ||
+              logs.contains('Unknown encoder "libx264"'));
+      if (unknownX264 && hasX264) {
+        // Retry with mpeg4 when this build doesn't actually have libx264.
+        final fallbackCmd = <String>[
+          '-y',
+          '-ss', (start.inMilliseconds / 1000.0).toStringAsFixed(3),
+          if (end != null) ...['-to', (end.inMilliseconds / 1000.0).toStringAsFixed(3)],
+          '-i', inputPath,
+          '-vf', vf,
+          '-fps_mode', 'cfr',
+          '-r', '30',
+          '-pix_fmt', 'yuv420p',
+          '-c:v', 'mpeg4',
+          '-qscale:v', '3',
+          '-c:a', 'aac',
+          '-b:a', '128k',
+          '-ar', '44100',
+          '-movflags', '+faststart',
+          out,
+        ];
+        session = await FFmpegKit.executeWithArguments(fallbackCmd);
+        rc = await session.getReturnCode();
+        if (ReturnCode.isSuccess(rc)) return out;
+      }
+      final finalLogs = await session.getAllLogsAsString();
+      throw Exception('Mali-safe export failed (${rc?.getValue()}):$finalLogs');
     }
     return out;
   }

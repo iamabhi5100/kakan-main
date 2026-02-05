@@ -48,6 +48,7 @@ class Video {
     final videoThumb = _extractFirstUrlFromListOrString(
       json,
       listKeys: const ['thumbnail', 'thumbnails'],
+      preferMinWidth: 320, // prefer mqdefault/hqdefault/sddefault over default 120x90
     );
 
     final channelAvatar = _extractFirstUrlFromListOrString(

@@ -45,9 +45,12 @@ class FeedRemoteDataSourceImpl implements FeedRemoteDataSource {
       final response = await apiService.get(url, includeAuth: true);
 
       if (response is Map<String, dynamic> && response.containsKey('results')) {
-        final results = response['results'] as List<dynamic>;
+        final resultsRaw = response['results'];
+        final results = resultsRaw is List<dynamic> ? resultsRaw : <dynamic>[];
         final list = results
-            .map((json) => FeedModel.fromJson(json as Map<String, dynamic>))
+            .where((e) => e != null && e is Map<String, dynamic>)
+            .cast<Map<String, dynamic>>()
+            .map((json) => FeedModel.fromJson(json))
             .toList();
         return {
           'results': list,

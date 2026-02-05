@@ -17,12 +17,14 @@ class PostVideoEditorScreen extends StatefulWidget {
   final String videoPath;
   final String? mediaId;
   final String? title;
+  final bool fromCarousel;
 
   const PostVideoEditorScreen({
     super.key,
     required this.videoPath,
     this.mediaId,
     this.title,
+    this.fromCarousel = false,
   });
 
   @override
@@ -236,11 +238,15 @@ class _PostVideoEditorScreenState extends State<PostVideoEditorScreen> {
       );
 
       if (!mounted) return;
-      context.go('/video-post', extra: {
-        'filePath': safe,
-        'mediaId': widget.mediaId ?? '',
-        'title': widget.title ?? '',
-      });
+      if (widget.fromCarousel) {
+        context.pop({'filePath': safe});
+      } else {
+        context.go('/video-post', extra: {
+          'filePath': safe,
+          'mediaId': widget.mediaId ?? '',
+          'title': widget.title ?? '',
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -1,3 +1,16 @@
+/// A single media item in a feed post (e.g. one slide in a carousel).
+class FeedMediaItem {
+  final String type; // 'image' | 'video' | 'audio'
+  final String mediaFile;
+  final String? thumbnail;
+
+  const FeedMediaItem({
+    required this.type,
+    required this.mediaFile,
+    this.thumbnail,
+  });
+}
+
 class FeedEntity {
   final String id;
   final UserProfileDetails userProfileDetails;
@@ -7,6 +20,8 @@ class FeedEntity {
   final String caption;
   final String mediaFile;
   final String? thumbnail;
+  /// For carousel posts, all media items in order; null for single-media posts.
+  final List<FeedMediaItem>? mediaItems;
   final String privacy;
   final int likesCount;
   final int repostCount;
@@ -23,6 +38,7 @@ class FeedEntity {
     required this.caption,
     required this.mediaFile,
     this.thumbnail,
+    this.mediaItems,
     required this.privacy,
     required this.likesCount,
     required this.repostCount,

@@ -1,6 +1,7 @@
 // lib/features/youtube/data/youtube_repository_impl.dart
 
 import 'package:dartz/dartz.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -81,7 +82,31 @@ class YoutubeRepositoryImpl implements YoutubeRepository {
       return Right(path);
     } catch (e, st) {
       print('[YT_REPO] downloadVideo error: $e\n$st');
-      return Left(ServerFailure());
+      final message = _toUserFriendlyDownloadMessage(e);
+      return Left(ServerFailure(exception: ServerException(message: message)));
     }
+  }
+
+  /// Converts download errors to user-friendly messages (avoids showing "ServerFailure" or raw HTTP/stack traces).
+  String _toUserFriendlyDownloadMessage(Object e) {
+    final s = e.toString().toLowerCase();
+    if (s.contains('in your region') || s.contains('region restricted')) {
+      return 'This video is not available for download in your region.';
+    }
+    if (e is DioException) {
+      final code = e.response?.statusCode;
+      if (code == 403 || code == 429 || code == 400) {
+        if (code == 403) return 'This video is restricted or unavailable for download.';
+        if (code == 429) return 'Rate limit reached. Please wait a few minutes and try again.';
+        return 'This video could not be downloaded. Please try another video.';
+      }
+      final msg = (e.message ?? e.toString()).toLowerCase();
+      if (msg.contains('403') || msg.contains('forbidden')) return 'This video is restricted or unavailable for download.';
+      if (msg.contains('429') || msg.contains('rate limit')) return 'Rate limit reached. Please wait a few minutes and try again.';
+      if (msg.contains('timeout') || msg.contains('timed out')) return 'Download timed out. Please check your connection and try again.';
+    }
+    if (s.contains('403') || s.contains('forbidden') || s.contains('restricted')) return 'This video is restricted or unavailable for download.';
+    if (s.contains('429') || s.contains('rate limit')) return 'Rate limit reached. Please wait a few minutes and try again.';
+    return 'This video could not be downloaded. Please try again or choose another video.';
   }
 }

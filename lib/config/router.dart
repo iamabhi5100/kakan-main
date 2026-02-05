@@ -19,11 +19,17 @@ import 'package:kakan/features/login/presentation/widgets/successfull_login.dart
 import 'package:kakan/features/myfiles/presentation/myfiles_screen.dart';
 import 'package:kakan/features/onboarding/presentation/onboarding_screen.dart';
 
+import 'package:kakan/features/postmyfeed/data/models/selected_media_item.dart';
 import 'package:kakan/features/postmyfeed/presentation/audio_post_screen.dart' as audio_post;
+import 'package:kakan/features/postmyfeed/presentation/carousel_post_screen.dart';
+import 'package:kakan/features/postmyfeed/presentation/image_post_screen.dart';
 import 'package:kakan/features/postmyfeed/presentation/main_post_screen.dart';
-import 'package:kakan/features/postmyfeed/presentation/video_post_screen.dart' as video_post;
 import 'package:kakan/features/postmyfeed/presentation/post_audio_editor_page.dart';
+import 'package:kakan/features/postmyfeed/presentation/post_image_editor_screen.dart';
 import 'package:kakan/features/postmyfeed/presentation/post_video_editor_screen.dart';
+import 'package:kakan/features/postmyfeed/presentation/selected_items_page.dart';
+import 'package:kakan/features/postmyfeed/presentation/video_post_screen.dart' as video_post;
+import 'package:kakan/features/postmyfeed/presentation/bloc/post_bloc/post_bloc.dart';
 
 import 'package:kakan/features/profile/presentation/bloc/profile_detail/profiledetails_bloc.dart';
 import 'package:kakan/features/profile/presentation/bloc/profile_post_list/profile_posts_bloc.dart';
@@ -220,11 +226,13 @@ final GoRouter router = GoRouter(
         final filePath = extra['filePath'] as String?;
         final videoId = extra['videoId'] as String?;
         final title = extra['title'] as String?;
+        final thumbnailUrl = extra['thumbnailUrl'] as String?;
         return AuthGate(
           child: AudioEditorPage(
             audioPath: filePath ?? '',
             videoId: videoId ?? '',
             title: title ?? '',
+            thumbnailUrl: thumbnailUrl,
           ),
         );
       },
@@ -236,11 +244,40 @@ final GoRouter router = GoRouter(
         final filePath = extra['filePath'] as String?;
         final mediaId = extra['mediaId'] as String?;
         final title = extra['title'] as String?;
+        final fromCarousel = extra['fromCarousel'] as bool? ?? false;
         return AuthGate(
           child: PostVideoEditorScreen(
             videoPath: filePath ?? '',
             mediaId: mediaId,
             title: title,
+            fromCarousel: fromCarousel,
+          ),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/post-image-editor',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        final filePath = extra['filePath'] as String? ?? '';
+        return AuthGate(child: PostImageEditorScreen(filePath: filePath));
+      },
+    ),
+    GoRoute(
+      path: '/selected-items',
+      builder: (context, state) {
+        final items = state.extra as List<SelectedMediaItem>? ?? [];
+        return AuthGate(child: SelectedItemsPage(initialItems: items));
+      },
+    ),
+    GoRoute(
+      path: '/carousel-post',
+      builder: (context, state) {
+        final items = state.extra as List<SelectedMediaItem>? ?? [];
+        return AuthGate(
+          child: BlocProvider(
+            create: (_) => di.sl<PostBloc>(),
+            child: CarouselPostScreen(items: items),
           ),
         );
       },
@@ -344,6 +381,19 @@ final GoRouter router = GoRouter(
         final extra = state.extra as Map<String, dynamic>? ?? {};
         return AuthGate(
           child: video_post.VideoPostScreen(
+            filePath: (extra['filePath'] as String?) ?? '',
+            mediaId: (extra['mediaId'] as String?) ?? '',
+            title: (extra['title'] as String?) ?? '',
+          ),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/image-post',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return AuthGate(
+          child: ImagePostScreen(
             filePath: (extra['filePath'] as String?) ?? '',
             mediaId: (extra['mediaId'] as String?) ?? '',
             title: (extra['title'] as String?) ?? '',

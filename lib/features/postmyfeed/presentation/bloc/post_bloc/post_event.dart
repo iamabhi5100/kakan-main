@@ -1,3 +1,5 @@
+import 'package:kakan/features/postmyfeed/domain/entities/carousel_media_item_entity.dart';
+
 abstract class PostEvent {}
 
 class CreatePostEvent extends PostEvent {
@@ -17,5 +19,19 @@ class CreatePostEvent extends PostEvent {
     this.mediaId,
     this.thumbnailPath,
     required this.shareTo,
+  });
+}
+
+class CreatePostCarouselEvent extends PostEvent {
+  final String title;
+  final String? caption;
+  final String shareTo;
+  final List<CarouselMediaItemEntity> items;
+
+  CreatePostCarouselEvent({
+    required this.title,
+    this.caption,
+    required this.shareTo,
+    required this.items,
   });
 }

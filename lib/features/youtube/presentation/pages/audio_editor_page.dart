@@ -2,7 +2,6 @@
 // (Audio editor screen with trimming, exporting, uploading, and ringtone flows)
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_full/return_code.dart';
@@ -777,12 +776,16 @@ class _AudioEditorPageState extends State<AudioEditorPage>
       const playheadColor    = Colors.yellowAccent;
       const liveWaveColor    = Colors.cyanAccent;
 
+      final playheadLeft = (width * _currentPositionPercent)
+          .clamp(width * _trimStartPercent, width * _trimEndPercent);
+
       return Column(
         children: [
           SizedBox(
             height: 112,
             child: Stack(
               alignment: Alignment.center,
+              clipBehavior: Clip.none,
               children: [
                 Container(
                   height: 78,
@@ -822,21 +825,42 @@ class _AudioEditorPageState extends State<AudioEditorPage>
                     ),
                   ),
                 ),
+                // Current position playhead — drawn on top so it’s always visible
                 Positioned(
-                  left: (width * _currentPositionPercent)
-                      .clamp(width * _trimStartPercent, width * _trimEndPercent),
+                  left: playheadLeft - 2,
+                  top: 0,
                   child: Container(
-                    width: 2.5,
+                    width: 4,
                     height: 92,
                     decoration: BoxDecoration(
                       color: playheadColor,
+                      borderRadius: BorderRadius.circular(2),
                       boxShadow: [
                         BoxShadow(
-                          color: playheadColor.withOpacity(0.5),
-                          blurRadius: 4,
+                          color: playheadColor.withOpacity(0.7),
+                          blurRadius: 6,
                           spreadRadius: 1,
                         ),
                       ],
+                    ),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        margin: const EdgeInsets.only(top: 2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: playheadColor,
+                          border: Border.all(color: _bg, width: 1.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: playheadColor.withOpacity(0.6),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -985,56 +1009,21 @@ class _AudioEditorPageState extends State<AudioEditorPage>
                   children: [
                     const SizedBox(height: 8),
 
-                    // Preview card
+                    // Music-player style: thumbnail poster with play/pause above
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: _card,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x66000000),
-                              blurRadius: 14,
-                              offset: Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Column(
-                          children: [
-                            // Play/Pause
-                            Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.2),
-                                    blurRadius: 10,
-                                  ),
-                                ],
-                              ),
-                              child: IconButton(
-                                icon: Icon(
-                                  _isPlaying
-                                      ? Icons.pause_rounded
-                                      : Icons.play_arrow_rounded,
-                                  color: Colors.black,
-                                ),
-                                iconSize: 50,
-                                onPressed: _handlePlayPause,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _isWaveformLoaded
-                                  ? '${_formatDuration(Duration(milliseconds: (_currentPositionPercent * _audioDuration.inMilliseconds).round()))}  /  ${_formatDuration(_audioDuration)}'
-                                  : '00:00 / 00:00',
-                              style: const TextStyle(color: _muted),
-                            ),
-                          ],
-                        ),
+                      child: _MusicPlayerPoster(
+                        thumbnailPath: _prefetchedThumbPath,
+                        thumbnailUrl: widget.thumbnailUrl,
+                        title: widget.title,
+                        isPlaying: _isPlaying,
+                        onPlayPause: _handlePlayPause,
+                        currentPosition: _isWaveformLoaded
+                            ? Duration(
+                                milliseconds:
+                                    (_currentPositionPercent * _audioDuration.inMilliseconds).round())
+                            : Duration.zero,
+                        totalDuration: _audioDuration,
                       ),
                     ),
 
@@ -1115,6 +1104,182 @@ class _AudioEditorPageState extends State<AudioEditorPage>
             // Export/Upload overlay
             _progressOverlay(),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MusicPlayerPoster extends StatelessWidget {
+  final String? thumbnailPath;
+  final String? thumbnailUrl;
+  final String title;
+  final bool isPlaying;
+  final VoidCallback onPlayPause;
+  final Duration currentPosition;
+  final Duration totalDuration;
+
+  const _MusicPlayerPoster({
+    required this.thumbnailPath,
+    this.thumbnailUrl,
+    required this.title,
+    required this.isPlaying,
+    required this.onPlayPause,
+    required this.currentPosition,
+    required this.totalDuration,
+  });
+
+  static String _formatDuration(Duration d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final m = d.inMinutes.remainder(60);
+    return '${two(m)}:${two(d.inSeconds.remainder(60))}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Thumbnail size (increased for better visibility)
+    const double thumbSize = 220.0;
+    const double playButtonSize = 56.0;
+
+    final thumbnailWidget = ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: thumbnailPath != null && File(thumbnailPath!).existsSync()
+          ? Image.file(
+              File(thumbnailPath!),
+              width: thumbSize,
+              height: thumbSize,
+              fit: BoxFit.cover,
+            )
+          : (thumbnailUrl != null &&
+                  thumbnailUrl!.isNotEmpty &&
+                  (thumbnailUrl!.startsWith('http://') ||
+                      thumbnailUrl!.startsWith('https://')))
+              ? Image.network(
+                  thumbnailUrl!,
+                  width: thumbSize,
+                  height: thumbSize,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _placeholderThumb(thumbSize),
+                )
+              : _placeholderThumb(thumbSize),
+    );
+
+    return Container(
+      width: 280,
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 14,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Thumbnail with play button on top (above/over the image)
+          Padding(
+            padding: const EdgeInsets.only(top: 20, bottom: 4),
+            child: SizedBox(
+              width: thumbSize,
+              height: thumbSize,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: thumbnailWidget,
+                  ),
+                  // Play/Pause overlaid on top of the thumbnail
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onPlayPause,
+                      customBorder: const CircleBorder(),
+                      child: Container(
+                        width: playButtonSize,
+                        height: playButtonSize,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [_accent2, _accent],
+                          ),
+                          border: Border.all(color: Colors.white24, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _accent.withOpacity(0.5),
+                              blurRadius: 12,
+                              spreadRadius: 1,
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          isPlaying
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              color: _text,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${_formatDuration(currentPosition)} / ${_formatDuration(totalDuration)}',
+            style: const TextStyle(color: _muted, fontSize: 13),
+          ),
+          const SizedBox(height: 18),
+        ],
+      ),
+    );
+  }
+
+  Widget _placeholderThumb(double size) {
+    return Container(
+      width: size,
+      height: size,
+      color: _trimBg,
+      child: const Center(
+        child: Icon(
+          Icons.music_note_rounded,
+          size: 48,
+          color: _muted,
         ),
       ),
     );

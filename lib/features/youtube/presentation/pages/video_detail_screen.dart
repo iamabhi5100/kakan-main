@@ -99,17 +99,23 @@ class _VideoDetailScreenState extends State<VideoDetailScreen> {
 
   void _showSnackBar(String message) {
     String displayMessage = message;
-    if (message.contains('Video unavailable') ||
+    if (message.contains('in your region') || message.contains('region restricted')) {
+      displayMessage = 'This video is not available for download in your region.';
+    } else if (message.contains('Video unavailable') ||
         message.contains('restricted') ||
         message.contains('403') ||
+        message.contains('forbidden') ||
         message.contains('No available video streams')) {
       displayMessage = 'This video is restricted or unavailable for download.';
-    } else if (message.contains('Rate limit exceeded')) {
+    } else if (message.contains('Rate limit exceeded') || message.contains('rate limit')) {
       displayMessage =
           'Rate limit reached. Please wait a few minutes and try again.';
     } else if (message.contains('Request Entity Too Large')) {
       displayMessage =
           'Video file is too large. Try a smaller video or contact support.';
+    } else if (message.contains('ServerFailure') || message.contains("Instance of '") ||
+        message.contains('Unknown server error')) {
+      displayMessage = 'This video could not be downloaded. Please try again or choose another video.';
     }
     _safeSnack(displayMessage);
   }

@@ -1,6 +1,14 @@
+import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/features/reels/domain/entities/reel_entity.dart';
 
 class ReelModel {
+  static String _resolveMediaUrl(String? path) {
+    if (path == null || path.isEmpty) return path ?? '';
+    final trimmed = path.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    if (trimmed.startsWith('/')) return '${ConstantApi.baseUrl}$trimmed';
+    return trimmed;
+  }
   final String id;
   final UserProfileDetailsModel userProfileDetails;
   final String created;
@@ -31,18 +39,39 @@ class ReelModel {
     required this.flagLiked,
   });
 
-  /// Null-safe constructor (DO NOT use strict `as String`)
+  /// Null-safe constructor. Supports feeds/trims API shape: post with nested media[].
   factory ReelModel.fromJsonSafe(Map<String, dynamic> json) {
     final up = (json['user_profile_details'] as Map?)?.cast<String, dynamic>() ?? const {};
+    // API returns media[]; take first item for media_file, media_type, thumbnail
+    final mediaList = json['media'];
+    final rawList = mediaList is List<dynamic> ? mediaList : <dynamic>[];
+    dynamic firstMedia;
+    if (rawList.isNotEmpty && rawList.first is Map<String, dynamic>) {
+      firstMedia = rawList.first as Map<String, dynamic>;
+    }
+    final mediaFileRaw = firstMedia != null
+        ? (firstMedia['media_file'] ?? '').toString()
+        : (json['media_file'] ?? '').toString();
+    final mediaFile = _resolveMediaUrl(mediaFileRaw);
+    final mediaType = firstMedia != null
+        ? (firstMedia['media_type'] ?? json['post_type'] ?? '').toString()
+        : (json['media_type'] ?? json['post_type'] ?? '').toString();
+    final thumbRaw = firstMedia != null
+        ? firstMedia['thumbnail']?.toString()
+        : json['thumbnail']?.toString();
+    final thumbnail = (thumbRaw != null && thumbRaw.toString().trim().isNotEmpty)
+        ? _resolveMediaUrl(thumbRaw)
+        : null;
+
     return ReelModel(
       id: (json['id'] ?? '').toString(),
       userProfileDetails: UserProfileDetailsModel.fromJsonSafe(up),
       created: (json['created'] ?? '').toString(),
-      mediaType: (json['media_type'] ?? '').toString(),
+      mediaType: mediaType,
       title: (json['title'] ?? '').toString(),
       caption: (json['caption'] ?? '').toString(),
-      mediaFile: (json['media_file'] ?? '').toString(),
-      thumbnail: json['thumbnail'] == null ? null : json['thumbnail'].toString(),
+      mediaFile: mediaFile,
+      thumbnail: thumbnail,
       privacy: (json['privacy'] ?? '').toString(),
       likesCount: _safeInt(json['likes_count']),
       repostCount: _safeInt(json['repost_count']),

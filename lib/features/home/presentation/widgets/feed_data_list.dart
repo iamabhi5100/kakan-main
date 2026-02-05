@@ -13,6 +13,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/config/theme.dart'; // exposes `appTheme`
 import 'package:kakan/core/utils/media_manager.dart';
 import 'package:kakan/core/utils/session_manager.dart';
@@ -253,6 +254,307 @@ class _FeedDataListState extends State<FeedDataList> {
   }
 }
 
+/// Playable video page for one carousel slide (only initializes when current).
+class _CarouselVideoPage extends StatefulWidget {
+  final String videoUrl;
+  final String? thumbnailUrl;
+  final double height;
+  final bool isCurrentPage;
+
+  const _CarouselVideoPage({
+    required this.videoUrl,
+    this.thumbnailUrl,
+    required this.height,
+    required this.isCurrentPage,
+  });
+
+  @override
+  State<_CarouselVideoPage> createState() => _CarouselVideoPageState();
+}
+
+class _CarouselVideoPageState extends State<_CarouselVideoPage> {
+  VideoPlayerController? _controller;
+  bool _initialized = false;
+  bool _error = false;
+
+  @override
+  void didUpdateWidget(covariant _CarouselVideoPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isCurrentPage && !widget.isCurrentPage) {
+      _pauseAndDispose();
+    } else if (!oldWidget.isCurrentPage && widget.isCurrentPage) {
+      _initVideo();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isCurrentPage) _initVideo();
+  }
+
+  Future<void> _initVideo() async {
+    if (_controller != null || widget.videoUrl.isEmpty) return;
+    setState(() => _error = false);
+    final c = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    _controller = c;
+    try {
+      await c.initialize();
+      if (!mounted) return;
+      setState(() {
+        _initialized = true;
+        _error = false;
+      });
+    } catch (e) {
+      if (kDebugMode) print('Carousel video init error: $e');
+      if (!mounted) return;
+      setState(() {
+        _initialized = false;
+        _error = true;
+      });
+    }
+  }
+
+  void _pauseAndDispose() {
+    _controller?.pause();
+    _controller?.dispose();
+    _controller = null;
+    _initialized = false;
+  }
+
+  @override
+  void dispose() {
+    _pauseAndDispose();
+    super.dispose();
+  }
+
+  void _togglePlayPause() {
+    final c = _controller;
+    if (c == null) return;
+    if (c.value.isPlaying) {
+      c.pause();
+    } else {
+      c.play();
+    }
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.isCurrentPage) {
+      return Container(
+        height: widget.height,
+        color: Colors.grey[800],
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (widget.thumbnailUrl != null)
+              Image.network(
+                widget.thumbnailUrl!,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: widget.height,
+                errorBuilder: (_, __, ___) => const SizedBox.expand(),
+              ),
+            const Center(
+              child: Icon(Icons.play_circle_outline, size: 64, color: Colors.white70),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_error) {
+      return Container(
+        height: widget.height,
+        color: Colors.grey[800],
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.white70),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _initVideo,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (!_initialized || _controller == null) {
+      return Container(
+        height: widget.height,
+        color: Colors.grey[800],
+        child: const Center(child: CircularProgressIndicator(color: Colors.white70)),
+      );
+    }
+    final c = _controller!;
+    return GestureDetector(
+      onTap: _togglePlayPause,
+      child: Stack(
+        fit: StackFit.expand,
+        alignment: Alignment.center,
+        children: [
+          Center(
+            child: AspectRatio(
+              aspectRatio: c.value.aspectRatio,
+              child: VideoPlayer(c),
+            ),
+          ),
+          if (!c.value.isPlaying)
+            const Icon(Icons.play_circle_fill, size: 72, color: Colors.white70),
+        ],
+      ),
+    );
+  }
+}
+
+/// Swipeable carousel for posts with multiple media (post_type: carousel).
+class _CarouselMedia extends StatefulWidget {
+  final FeedEntity feed;
+  final String Function(String) normalizeUrl;
+  final double height;
+
+  const _CarouselMedia({
+    required this.feed,
+    required this.normalizeUrl,
+    this.height = 280,
+  });
+
+  @override
+  State<_CarouselMedia> createState() => _CarouselMediaState();
+}
+
+class _CarouselMediaState extends State<_CarouselMedia> {
+  late PageController _pageController;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.feed.mediaItems ?? [];
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            height: widget.height,
+            child: PageView.builder(
+              controller: _pageController,
+              onPageChanged: (index) => setState(() => _currentPage = index),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                final url = widget.normalizeUrl(item.mediaFile);
+                if (item.type == 'image') {
+                  return Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                    height: widget.height,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return SizedBox(
+                        height: widget.height,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            value: loadingProgress.expectedTotalBytes != null
+                                ? loadingProgress.cumulativeBytesLoaded /
+                                    (loadingProgress.expectedTotalBytes ?? 1)
+                                : null,
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: widget.height,
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: Icon(Icons.broken_image_outlined, size: 48, color: Colors.grey),
+                      ),
+                    ),
+                  );
+                }
+                if (item.type == 'video') {
+                  final thumbUrl = item.thumbnail != null && item.thumbnail!.isNotEmpty
+                      ? widget.normalizeUrl(item.thumbnail!)
+                      : null;
+                  return _CarouselVideoPage(
+                    videoUrl: url,
+                    thumbnailUrl: thumbUrl,
+                    height: widget.height,
+                    isCurrentPage: index == _currentPage,
+                  );
+                }
+                // Audio or other: show placeholder with play icon
+                final thumbUrl = item.thumbnail != null && item.thumbnail!.isNotEmpty
+                    ? widget.normalizeUrl(item.thumbnail!)
+                    : null;
+                return Container(
+                  height: widget.height,
+                  color: Colors.grey[800],
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (thumbUrl != null)
+                        Image.network(
+                          thumbUrl,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: widget.height,
+                          errorBuilder: (_, __, ___) => const SizedBox.expand(),
+                        ),
+                      const Center(
+                        child: Icon(Icons.play_circle_outline, size: 64, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        if (items.length > 1) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              items.length,
+              (index) => Container(
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: _currentPage == index
+                      ? (Theme.of(context).colorScheme.primary)
+                      : Colors.grey[400],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class FeedItemWidget extends StatefulWidget {
   final FeedEntity feed;
   final GlobalKey itemKey;
@@ -294,14 +596,20 @@ class _FeedItemWidgetState extends State<FeedItemWidget>
   // AUDIO HELPERS / FALLBACKS
   // -------------------------
   String _normalizeUrl(String url) {
+    if (url.isEmpty) return url;
+    final trimmed = url.trim();
+    // Relative paths from API (e.g. /media/media_posts/...) must use base URL
+    if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+      return '${ConstantApi.baseUrl}$trimmed';
+    }
     try {
-      final u = Uri.parse(url);
+      final u = Uri.parse(trimmed);
       if (u.host == 'localhost' || u.host == '127.0.0.1') {
         return u.replace(host: '10.0.2.2').toString(); // Android emulator host
       }
-      return url;
+      return trimmed;
     } catch (_) {
-      return url;
+      return trimmed;
     }
   }
 
@@ -399,9 +707,8 @@ class _FeedItemWidgetState extends State<FeedItemWidget>
 
   Future<void> _initializeMedia() async {
     if (widget.feed.mediaType == 'video' && widget.feed.mediaFile.isNotEmpty) {
-      _controller = VideoPlayerController.networkUrl(
-        Uri.parse(widget.feed.mediaFile),
-      );
+      final videoUrl = _normalizeUrl(widget.feed.mediaFile);
+      _controller = VideoPlayerController.networkUrl(Uri.parse(videoUrl));
       await _controller!.initialize();
       // Ensure initial volume respects mute state
       await _controller!.setVolume(_videoMuted ? 0.0 : 1.0); // NEW
@@ -712,12 +1019,57 @@ class _FeedItemWidgetState extends State<FeedItemWidget>
                       ],
                     ),
             )
-          else
+          else if ((widget.feed.mediaItems?.length ?? 0) > 1)
+            _CarouselMedia(
+              feed: widget.feed,
+              normalizeUrl: _normalizeUrl,
+              height: 280,
+            )
+          else if ((widget.feed.mediaType == 'image' || widget.feed.mediaType == 'carousel') &&
+              widget.feed.mediaFile.isNotEmpty)
+            GestureDetector(
+              onTap: () {
+                // Optional: full-screen image viewer
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  _normalizeUrl(widget.feed.mediaFile),
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                  height: 280,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return SizedBox(
+                      height: 280,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded /
+                                  (loadingProgress.expectedTotalBytes ?? 1)
+                              : null,
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 200,
+                    color: Colors.grey[300],
+                    child: const Center(
+                      child: Icon(Icons.broken_image_outlined, size: 48, color: Colors.grey),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else if (widget.feed.mediaType == 'video' || widget.feed.mediaType == 'audio')
             Container(
               height: 200,
               color: Colors.grey[200],
               child: const Center(child: CircularProgressIndicator()),
-            ),
+            )
+          else
+            const SizedBox.shrink(),
 
           const SizedBox(height: 8),
 

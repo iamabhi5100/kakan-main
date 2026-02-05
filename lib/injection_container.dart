@@ -74,6 +74,7 @@ import 'package:kakan/features/postmyfeed/data/datasources/post_remote_data_sour
 import 'package:kakan/features/postmyfeed/data/repositories/post_repository_impl.dart';
 import 'package:kakan/features/postmyfeed/domain/repositories/post_repository.dart';
 import 'package:kakan/features/postmyfeed/domain/usecases/create_post.dart';
+import 'package:kakan/features/postmyfeed/domain/usecases/create_post_carousel.dart';
 import 'package:kakan/features/postmyfeed/presentation/bloc/post_bloc/post_bloc.dart';
 
 // Profile
@@ -278,8 +279,9 @@ void init() {
       () => ChatRemoteDataSourceImpl(apiService: sl(), sessionManager: sl()));
 
   // Post Feature
-  sl.registerFactory(() => PostBloc(createPost: sl()));
+  sl.registerFactory(() => PostBloc(createPost: sl(), createPostCarousel: sl()));
   sl.registerLazySingleton(() => CreatePost(sl()));
+  sl.registerLazySingleton(() => CreatePostCarousel(sl()));
   sl.registerLazySingleton<PostRepository>(() => PostRepositoryImpl(
         remoteDataSource: sl<PostRemoteDataSource>(),
         networkInfo: sl(),

@@ -76,6 +76,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   double _durationSec = 0.0;
   double _trimStartSec = 0.0;
   double _trimEndSec = 0.0;
+  double _videoAspectRatioValue = 9 / 16; // Dynamic: vertical (shorts) or horizontal (regular)
 
   Timer? _positionTimer;
   void _onPlayerPositionUpdate() {
@@ -122,6 +123,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
       _trimEndSec = _durationSec;
       if (_useNative) {
         _nativeController = NativeVideoController();
+        _videoAspectRatioValue = await FFmpegExporter.getMediaAspectRatio(widget.videoPath);
         setState(() => _inited = true);
         _positionTimer = Timer.periodic(const Duration(milliseconds: 100), (_) async {
           if (!mounted) return;
@@ -135,6 +137,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
         _durationSec = _playerController!.value.duration.inMilliseconds / 1000.0;
         if (_durationSec <= 0) _durationSec = 1.0;
         _trimEndSec = _durationSec;
+        _videoAspectRatioValue = _playerController!.value.aspectRatio.clamp(0.1, 10.0);
         setState(() => _inited = true);
         _playerController!.addListener(_onPlayerPositionUpdate);
       }
@@ -369,15 +372,33 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
     _isUploading.value = true;
     _uploadProgress.value = 0;
 
+    String? thumbPath;
     try {
       final file = File(path);
       if (!await file.exists()) throw Exception('File not found');
       final duration = await _formatDuration(path);
 
+      // Generate thumbnail from exported video (first frame) for save API
+      try {
+        final tempDir = await getTemporaryDirectory();
+        final thumb = await VideoThumbnail.thumbnailFile(
+          video: path,
+          thumbnailPath: tempDir.path,
+          imageFormat: ImageFormat.JPEG,
+          maxWidth: 512,
+          quality: 85,
+          timeMs: 0,
+        );
+        if (thumb != null && await File(thumb).exists()) thumbPath = thumb;
+      } catch (_) {
+        // Continue without thumbnail if generation fails
+      }
+
       await _api.saveDownloadedVideo(
         title: widget.title,
         filePath: path,
         duration: duration,
+        thumbnailPath: thumbPath,
         onSendProgress: (sent, total) {
           final p = total == 0 ? 0.0 : (sent / total).clamp(0, 1).toDouble();
           _uploadProgress.value = p;
@@ -391,13 +412,18 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
       _snack(tooLarge ? 'Video too large for server' : 'Upload failed: $e',
           bg: Colors.redAccent);
     } finally {
+      if (thumbPath != null) {
+        try {
+          await File(thumbPath).delete();
+        } catch (_) {}
+      }
       _isUploading.value = false;
     }
   }
 
   double get _videoAspectRatio {
-    if (_useNative) return 9 / 16; // typical shorts
-    return _playerController?.value.aspectRatio.clamp(0.1, 10.0) ?? 9 / 16;
+    if (_useNative) return _videoAspectRatioValue;
+    return _playerController?.value.aspectRatio.clamp(0.1, 10.0) ?? _videoAspectRatioValue;
   }
 
   bool get _showPauseOverlay {

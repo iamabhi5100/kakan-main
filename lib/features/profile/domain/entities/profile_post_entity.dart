@@ -15,6 +15,8 @@ class ProfilePostEntity {
   final bool flagOwnPost; // New field
   final String userId;
   final UserProfileDetails userProfileDetails;
+  /// For carousel posts (post_type: carousel), all media in order; null for single-media.
+  final List<FeedMediaItem>? mediaItems;
 
   ProfilePostEntity({
     required this.id,
@@ -31,5 +33,6 @@ class ProfilePostEntity {
     required this.flagOwnPost, // Added to constructor
     required this.userId,
     required this.userProfileDetails,
+    this.mediaItems,
   });
 }

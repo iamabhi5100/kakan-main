@@ -27,10 +27,17 @@ class ProfilePostsRemoteDataSourceImpl implements ProfilePostsRemoteDataSource {
       
       if (response is Map<String, dynamic> && response.containsKey('results')) {
         final results = response['results'] as List<dynamic>;
-        final allPosts = results.map((json) => ProfilePostModel.fromJson(json)).toList();
-        
-        // <-- UPDATED: Filter client-side based on the requested mediaType
-        return allPosts.where((post) => post.mediaType == mediaType).toList();
+        final allPosts = results
+            .where((e) => e != null && e is Map<String, dynamic>)
+            .cast<Map<String, dynamic>>()
+            .map((json) => ProfilePostModel.fromJson(json))
+            .toList();
+
+        // Video tab: show all except post_type "audio". Song tab: show only post_type "audio".
+        if (mediaType == 'audio') {
+          return allPosts.where((post) => post.postType == 'audio').toList();
+        }
+        return allPosts.where((post) => post.postType != 'audio').toList();
       } else {
         throw ServerException(message: 'Invalid response format');
       }

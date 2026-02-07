@@ -11,6 +11,7 @@ import 'package:gap/gap.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:kakan/features/reels/presentation/widgets/reel_comments_screen.dart';
+import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/config/theme.dart';
 
 class ReelItem extends StatefulWidget {
@@ -509,8 +510,10 @@ class _ReelItemState extends State<ReelItem> {
   }
 
   Future<void> _shareExternally() async {
+    // Share link opens app if installed (deep link to reel), else opens website
+    final String shareLink = ConstantApi.shareUrlForReel(widget.reel.id);
     final String message =
-        'Check out this reel: ${widget.reel.mediaFile}\nTitle: ${widget.reel.title}\nCaption: ${widget.reel.caption}';
+        'Check out this reel: $shareLink\n\nTitle: ${widget.reel.title}\nCaption: ${widget.reel.caption}';
     try {
       await Share.share(
         message,
@@ -532,8 +535,9 @@ class _ReelItemState extends State<ReelItem> {
   }
 
   Future<void> _copyLink() async {
+    // Copy link to reel so opening it launches app and shows this reel
     try {
-      await Clipboard.setData(ClipboardData(text: widget.reel.mediaFile));
+      await Clipboard.setData(ClipboardData(text: ConstantApi.shareUrlForReel(widget.reel.id)));
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Link copied to clipboard')));

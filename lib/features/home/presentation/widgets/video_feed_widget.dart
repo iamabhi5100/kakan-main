@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart'; // ⬅️ add
+import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/config/theme.dart';
 import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_bloc.dart';
 import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_event.dart';
 import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_state.dart';
 import 'package:kakan/features/home/presentation/widgets/comments_screen.dart';
+import 'package:kakan/features/home/presentation/widgets/feed_data_list.dart';
 import 'package:kakan/features/home/presentation/widgets/share_screen.dart';
 import 'package:kakan/features/profile/domain/entities/profile_post_entity.dart';
 import 'package:kakan/features/profile/presentation/bloc/profile_post_delete/delete_post_bloc.dart';
@@ -83,8 +85,13 @@ class _VideoFeedWidgetState extends State<VideoFeedWidget> {
     _reposts = widget.post?.repostCount ?? 0;
     _flagLiked = widget.post?.flagLiked ?? false;
 
-    if (widget.post?.mediaFile != null && widget.post!.mediaFile!.isNotEmpty) {
-      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.post!.mediaFile!))
+    // Carousel posts use CarouselMediaWidget; no need to init single-video controller
+    final isCarousel = widget.post?.mediaItems != null && widget.post!.mediaItems!.length > 1;
+    if (isCarousel) {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(''));
+    } else if (widget.post?.mediaFile != null && widget.post!.mediaFile!.isNotEmpty) {
+      final url = _normalizeMediaUrl(widget.post!.mediaFile!);
+      _controller = VideoPlayerController.networkUrl(Uri.parse(url))
         ..initialize().then((_) {
           if (mounted) setState(() {});
         }).catchError((error) {
@@ -95,6 +102,14 @@ class _VideoFeedWidgetState extends State<VideoFeedWidget> {
     } else {
       _controller = VideoPlayerController.networkUrl(Uri.parse(''));
     }
+  }
+
+  static String _normalizeMediaUrl(String url) {
+    if (url.isEmpty) return url;
+    final t = url.trim();
+    if (t.startsWith('http://') || t.startsWith('https://')) return t;
+    if (t.startsWith('/') && !t.startsWith('//')) return '${ConstantApi.baseUrl}$t';
+    return t;
   }
 
   @override
@@ -177,6 +192,7 @@ class _VideoFeedWidgetState extends State<VideoFeedWidget> {
         mediaFile: widget.post?.mediaFile,
         mediaType: widget.post?.mediaType,
         caption: widget.post?.caption,
+        postId: widget.post?.id,
       ),
     );
   }
@@ -353,27 +369,37 @@ class _VideoFeedWidgetState extends State<VideoFeedWidget> {
                       ),
                     ),
 
-                    // Video
-                    _controller.value.isInitialized
-                        ? AspectRatio(
-                            aspectRatio: _controller.value.aspectRatio,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                GestureDetector(
-                                  onTap: _togglePlayPause,
-                                  child: VideoPlayer(_controller),
-                                ),
-                                if (!_controller.value.isPlaying)
-                                  const Icon(Icons.play_arrow, color: Colors.white, size: 48),
-                              ],
+                    // Video or carousel (post_type: carousel with multiple media)
+                    if (widget.post?.mediaItems != null && widget.post!.mediaItems!.length > 1)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: CarouselMediaWidget(
+                          items: widget.post!.mediaItems!,
+                          height: 280,
+                          normalizeUrl: _normalizeMediaUrl,
+                        ),
+                      )
+                    else if (_controller.value.isInitialized)
+                      AspectRatio(
+                        aspectRatio: _controller.value.aspectRatio,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            GestureDetector(
+                              onTap: _togglePlayPause,
+                              child: VideoPlayer(_controller),
                             ),
-                          )
-                        : Container(
-                            height: 200,
-                            color: Colors.grey[200],
-                            child: const Center(child: CircularProgressIndicator()),
-                          ),
+                            if (!_controller.value.isPlaying)
+                              const Icon(Icons.play_arrow, color: Colors.white, size: 48),
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
+                        height: 200,
+                        color: Colors.grey[200],
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
 
                     // Actions
                     Padding(

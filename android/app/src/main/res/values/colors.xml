@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- UCrop / image_cropper: match app dark theme -->
+    <color name="ucrop_toolbar">#16181D</color>
+    <color name="ucrop_nav_bar">#0D0E12</color>
+    <color name="ucrop_status_bar">#0D0E12</color>
 </resources>

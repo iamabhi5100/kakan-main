@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:intl/intl.dart'; // ⬅️ add
+import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/config/theme.dart';
 import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_bloc.dart';
 import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_event.dart';
@@ -284,6 +285,14 @@ class _AudioFeedWidgetState extends State<AudioFeedWidget> {
     _initializeAudio();
   }
 
+  static String _normalizeMediaUrl(String url) {
+    if (url.isEmpty) return url;
+    final t = url.trim();
+    if (t.startsWith('http://') || t.startsWith('https://')) return t;
+    if (t.startsWith('/') && !t.startsWith('//')) return '${ConstantApi.baseUrl}$t';
+    return t;
+  }
+
   Future<void> _initializeAudio() async {
     if (widget.post == null ||
         widget.post!.mediaFile == null ||
@@ -297,7 +306,8 @@ class _AudioFeedWidgetState extends State<AudioFeedWidget> {
     }
     _audioPlayer = AudioPlayer();
     try {
-      await _audioPlayer!.setUrl(widget.post!.mediaFile!);
+      final url = _normalizeMediaUrl(widget.post!.mediaFile!);
+      await _audioPlayer!.setUrl(url);
       if (mounted) {
         setState(() {
           _audioError = null;
@@ -395,6 +405,7 @@ class _AudioFeedWidgetState extends State<AudioFeedWidget> {
         mediaFile: widget.post?.mediaFile,
         mediaType: widget.post?.mediaType,
         caption: widget.post?.caption,
+        postId: widget.post?.id,
       ),
     );
   }

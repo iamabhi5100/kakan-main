@@ -124,8 +124,9 @@ class PlaceholderScreen extends StatelessWidget {
   }
 }
 
-final GoRouter router = GoRouter(
-  initialLocation: '/splash',
+/// Creates the app router. [initialLocation] is used when app is opened from a shared link (e.g. /post/:id, /reel/:id).
+GoRouter createAppRouter({String initialLocation = '/splash'}) => GoRouter(
+  initialLocation: initialLocation,
   routes: [
     // Splash — paints immediately, then decides /home or /login itself.
     GoRoute(
@@ -172,6 +173,26 @@ final GoRouter router = GoRouter(
     GoRoute(
       path: '/home',
       builder: (context, state) => const AuthGate(child: HomeScreen()),
+    ),
+    // Deep link: shared post link opens app and shows feed (optional scroll to postId later)
+    GoRoute(
+      path: '/post/:postId',
+      builder: (context, state) {
+        final postId = state.pathParameters['postId'] ?? '';
+        return AuthGate(
+          child: HomeScreen(deepLinkPostId: postId.isNotEmpty ? postId : null),
+        );
+      },
+    ),
+    // Deep link: shared reel link opens app and shows reels (optional scroll to reelId later)
+    GoRoute(
+      path: '/reel/:reelId',
+      builder: (context, state) {
+        final reelId = state.pathParameters['reelId'] ?? '';
+        return AuthGate(
+          child: ReelsPage(deepLinkReelId: reelId.isNotEmpty ? reelId : null),
+        );
+      },
     ),
     GoRoute(
       path: '/youtube-dashboard',
@@ -419,3 +440,6 @@ final GoRouter router = GoRouter(
     body: Center(child: Text('Error: Route ${state.uri} not found')),
   ),
 );
+
+/// Default router (used when initial location is not from a deep link).
+final GoRouter router = createAppRouter();

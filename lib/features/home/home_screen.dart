@@ -24,7 +24,10 @@ import 'package:kakan/core/models/onboarding_form_args.dart';
 import 'package:kakan/features/login/data/datasources/remote_data_source.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  /// When app is opened from a shared post link (e.g. /post/:postId), pass the post id for future scroll-to.
+  final String? deepLinkPostId;
+
+  const HomeScreen({super.key, this.deepLinkPostId});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();

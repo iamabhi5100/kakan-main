@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
+import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/core/error/failures.dart';
 import 'package:kakan/core/usecases/usecase.dart';
 import 'package:kakan/features/home/data/models/share_models.dart';
@@ -16,12 +17,15 @@ class ShareScreen extends StatefulWidget {
   final String? mediaFile; // Can be a URL or local file path
   final String? mediaType;
   final String? caption;
+  /// Post ID for share link; when set, shared link opens this post in app (e.g. appShareUrl/post/{postId}).
+  final String? postId;
 
   const ShareScreen({
     super.key,
     this.mediaFile,
     this.mediaType,
     this.caption,
+    this.postId,
   });
 
   @override
@@ -168,24 +172,17 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   Future<void> _shareExternally() async {
-    if (widget.mediaFile == null || widget.mediaFile!.isEmpty) {
-      if (mounted) {
-        toastification.show(
-          context: context,
-          title: const Text('No media file available to share'),
-          type: ToastificationType.error,
-          style: ToastificationStyle.fillColored,
-          autoCloseDuration: const Duration(seconds: 3),
-        );
-      }
-      return;
-    }
-
-    final String message = 'Check out this post: ${widget.mediaFile}\nCaption: ${widget.caption ?? 'No caption'}';
+    // Share link opens app if installed (deep link to post), else opens website
+    final String shareLink = widget.postId != null && widget.postId!.isNotEmpty
+        ? ConstantApi.shareUrlForPost(widget.postId!)
+        : ConstantApi.appShareUrl;
+    final String message = 'Check out this post: $shareLink\n\nCaption: ${widget.caption ?? 'No caption'}';
     try {
-      // Check if mediaFile is a local file path
-      final isLocalFile = File(widget.mediaFile!).existsSync();
-      if (isLocalFile) {
+      // If we have a local media file, share it along with the app/website link
+      final hasLocalFile = widget.mediaFile != null &&
+          widget.mediaFile!.isNotEmpty &&
+          File(widget.mediaFile!).existsSync();
+      if (hasLocalFile) {
         await Share.shareXFiles(
           [XFile(widget.mediaFile!)],
           text: message,
@@ -224,21 +221,12 @@ class _ShareScreenState extends State<ShareScreen> {
   }
 
   Future<void> _copyLink() async {
-    if (widget.mediaFile == null || widget.mediaFile!.isEmpty) {
-      if (mounted) {
-        toastification.show(
-          context: context,
-          title: const Text('No media file available to copy'),
-          type: ToastificationType.error,
-          style: ToastificationStyle.fillColored,
-          autoCloseDuration: const Duration(seconds: 3),
-        );
-      }
-      return;
-    }
-
+    // Copy link to post (opens app if installed), else generic app/website URL
+    final String shareLink = widget.postId != null && widget.postId!.isNotEmpty
+        ? ConstantApi.shareUrlForPost(widget.postId!)
+        : ConstantApi.appShareUrl;
     try {
-      await Clipboard.setData(ClipboardData(text: widget.mediaFile!));
+      await Clipboard.setData(ClipboardData(text: shareLink));
       if (mounted) {
         toastification.show(
           context: context,

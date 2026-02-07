@@ -7,7 +7,10 @@ import 'package:kakan/features/reels/presentation/widgets/reel_item.dart';
 import 'package:kakan/injection_container.dart' as di;
 
 class ReelsPage extends StatefulWidget {
-  const ReelsPage({super.key});
+  /// When app is opened from a shared reel link (e.g. /reel/:reelId), pass the reel id for future scroll-to.
+  final String? deepLinkReelId;
+
+  const ReelsPage({super.key, this.deepLinkReelId});
 
   @override
   State<ReelsPage> createState() => _ReelsPageState();

@@ -3,12 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:shimmer/shimmer.dart';
 import 'package:kakan/config/theme.dart';
-import 'package:kakan/features/myfiles/domain/entities/download_entity.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_bloc.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_event.dart';
-import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_state.dart';
 import 'package:kakan/features/postmyfeed/data/datasources/post_remote_data_source.dart';
 import 'package:kakan/features/postmyfeed/data/models/selected_media_item.dart';
 import 'package:kakan/features/postmyfeed/presentation/widgets/library_picker_sheet.dart';
@@ -153,6 +150,11 @@ class _MainPostScreenState extends State<MainPostScreen> {
             final mediaFile = download.mediaFile;
             if (mediaFile == null || mediaFile.isEmpty || !mounted) return;
 
+            // Close modal first so loading overlay is visible on the screen behind
+            Navigator.pop(modalContext);
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+
+            if (!mounted) return;
             await _showLoading();
 
             String localPath = mediaFile;
@@ -160,11 +162,11 @@ class _MainPostScreenState extends State<MainPostScreen> {
               final downloaded = await _downloadMediaFile(mediaFile);
               if (downloaded == null) {
                 _hideLoading();
-                Navigator.pop(modalContext);
                 return;
               }
               localPath = downloaded;
             }
+            if (!mounted) return;
 
             if (mediaType == 'video') {
               final items = [
@@ -175,22 +177,14 @@ class _MainPostScreenState extends State<MainPostScreen> {
                   mediaId: download.id,
                 ),
               ];
-              Navigator.pop(modalContext);
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                context.push('/selected-items', extra: items).then((_) => _hideLoading());
-              });
+              context.push('/selected-items', extra: items).then((_) => _hideLoading());
             } else {
               final postData = <String, String?>{
                 'filePath': localPath,
                 'mediaId': download.id,
                 'title': download.title ?? '',
               };
-              Navigator.pop(modalContext);
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                context.push('/post-audio-editor', extra: postData).then((_) => _hideLoading());
-              });
+              context.push('/post-audio-editor', extra: postData).then((_) => _hideLoading());
             }
           },
         ),
@@ -354,32 +348,162 @@ class _MediaSourceSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = appTheme.primaryColor;
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20.0, horizontal: 16.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Choose Source', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 18)),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: Icon(Icons.photo_library_rounded, color: appTheme.primaryColor),
-              title: const Text('From Gallery'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              onTap: onGalleryTap,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Choose Source',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                      letterSpacing: -0.3,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Pick where to get your ${mediaType == 'video' ? 'photos or videos' : 'audio'} from',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey.shade600,
+                      fontSize: 14,
+                    ),
+              ),
+              const SizedBox(height: 24),
+              _SourceOptionCard(
+                icon: Icons.photo_library_rounded,
+                title: 'From Gallery',
+                subtitle: 'Choose from your device photos & videos',
+                gradientColors: [
+                  primary,
+                  Color.lerp(primary, const Color(0xFF6B6BD6), 0.4)!,
+                ],
+                onTap: onGalleryTap,
+              ),
+              const SizedBox(height: 14),
+              _SourceOptionCard(
+                icon: Icons.video_library_rounded,
+                title: 'From My Library',
+                subtitle: 'Use videos you’ve already downloaded',
+                gradientColors: [
+                  const Color(0xFF5B6B8A),
+                  const Color(0xFF3D4D6B),
+                ],
+                onTap: onLibraryTap,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SourceOptionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final List<Color> gradientColors;
+  final VoidCallback onTap;
+
+  const _SourceOptionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.gradientColors,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              colors: gradientColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            ListTile(
-              leading: Icon(Icons.video_library_rounded, color: appTheme.primaryColor),
-              title: const Text('From My Library'),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              onTap: onLibraryTap,
+            boxShadow: [
+              BoxShadow(
+                color: gradientColors.first.withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 28),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios_rounded, color: Colors.white.withValues(alpha: 0.9), size: 16),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

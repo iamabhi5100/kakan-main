@@ -1,11 +1,14 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:kakan/config/theme.dart';
 import 'package:kakan/features/myfiles/domain/entities/download_entity.dart';
+import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_bloc.dart';
+import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_event.dart';
 import 'package:kakan/features/postmyfeed/data/datasources/post_remote_data_source.dart';
 import 'package:kakan/features/postmyfeed/data/models/selected_media_item.dart';
 import 'package:kakan/features/postmyfeed/presentation/widgets/library_picker_sheet.dart';
@@ -70,6 +73,8 @@ class _SelectedItemsPageState extends State<SelectedItemsPage> {
   }
 
   void _openLibrary() {
+    // Trigger API fetch so library list shows downloads (videos for carousel)
+    context.read<DownloadsBloc>().add(GetDownloadsEvent(mediaType: 'video'));
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -139,80 +144,223 @@ class _SelectedItemsPageState extends State<SelectedItemsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final primary = appTheme.primaryColor;
     return Scaffold(
-      backgroundColor: appTheme.scaffoldBackgroundColor,
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        title: Text(
-          'Selected Items',
-          style: appTheme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
+        elevation: 0,
+        scrolledUnderElevation: 2,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => context.pop(),
+          color: Colors.black87,
         ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Selected Items',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                    fontSize: 20,
+                    letterSpacing: -0.3,
+                  ),
+            ),
+            if (_items.isNotEmpty)
+              Text(
+                '${_items.length} ${_items.length == 1 ? 'item' : 'items'} • Drag to reorder',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                    ),
+              ),
+          ],
+        ),
+        titleSpacing: 0,
       ),
       body: Column(
         children: [
           Expanded(
-            child: _items.isEmpty
-                ? Center(
-                    child: Text(
-                      'No items selected. Add from Gallery or Library.',
-                      style: appTheme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                : ReorderableListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    itemCount: _items.length,
-                    onReorder: (oldIndex, newIndex) {
-                      setState(() {
-                        if (newIndex > oldIndex) newIndex--;
-                        final item = _items.removeAt(oldIndex);
-                        _items.insert(newIndex, item);
-                      });
-                    },
-                    itemBuilder: (context, index) {
-                      final item = _items[index];
-                      return _SelectedItemTile(
-                        key: ValueKey('${item.path}_$index'),
-                        index: index,
-                        item: item,
-                        onEdit: () => _onEdit(index),
-                        onRemove: () => _removeAt(index),
-                      );
-                    },
-                  ),
+            child: _items.isEmpty ? _buildEmptyState(primary) : _buildList(primary),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+          _buildBottomSection(primary),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(Color primary) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.photo_library_outlined,
+                size: 48,
+                color: primary.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No items yet',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                    fontSize: 22,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add photos or videos from your gallery,\nor pick from your library.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.grey.shade600,
+                    height: 1.4,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _addFromGallery,
-                        icon: const Icon(Icons.photo_library_rounded),
-                        label: const Text('Gallery'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _openLibrary,
-                        icon: const Icon(Icons.video_library_rounded),
-                        label: const Text('Library'),
-                      ),
-                    ),
+                Expanded(
+                  child: _AddSourceCard(
+                    icon: Icons.photo_library_rounded,
+                    label: 'Gallery',
+                    gradientColors: [
+                      primary,
+                      Color.lerp(primary, const Color(0xFF6B6BD6), 0.4)!,
+                    ],
+                    onTap: _addFromGallery,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: _AddSourceCard(
+                    icon: Icons.video_library_rounded,
+                    label: 'Library',
+                    gradientColors: [
+                      const Color(0xFF5B6B8A),
+                      const Color(0xFF3D4D6B),
+                    ],
+                    onTap: _openLibrary,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildList(Color primary) {
+    return ReorderableListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      itemCount: _items.length,
+      onReorder: (oldIndex, newIndex) {
+        setState(() {
+          if (newIndex > oldIndex) newIndex--;
+          final item = _items.removeAt(oldIndex);
+          _items.insert(newIndex, item);
+        });
+      },
+      itemBuilder: (context, index) {
+        final item = _items[index];
+        return _SelectedItemTile(
+          key: ValueKey('${item.path}_$index'),
+          index: index,
+          item: item,
+          primary: primary,
+          onEdit: () => _onEdit(index),
+          onRemove: () => _removeAt(index),
+        );
+      },
+    );
+  }
+
+  Widget _buildBottomSection(Color primary) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 16 + MediaQuery.of(context).padding.bottom),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _AddSourceCard(
+                  icon: Icons.add_photo_alternate_rounded,
+                  label: 'Gallery',
+                  gradientColors: [
+                    primary.withValues(alpha: 0.9),
+                    Color.lerp(primary, const Color(0xFF6B6BD6), 0.5)!,
                   ],
+                  onTap: _addFromGallery,
+                  compact: true,
                 ),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: _items.isEmpty ? null : _onNext,
-                  child: const Text('Next'),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AddSourceCard(
+                  icon: Icons.video_library_rounded,
+                  label: 'Library',
+                  gradientColors: [
+                    const Color(0xFF5B6B8A),
+                    const Color(0xFF3D4D6B),
+                  ],
+                  onTap: _openLibrary,
+                  compact: true,
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          FilledButton(
+            onPressed: _items.isEmpty ? null : _onNext,
+            style: FilledButton.styleFrom(
+              backgroundColor: primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: Colors.grey.shade300,
+              disabledForegroundColor: Colors.grey.shade600,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 0,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _items.isEmpty ? 'Add items to continue' : 'Next',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (_items.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  const Icon(Icons.arrow_forward_rounded, size: 20),
+                ],
               ],
             ),
           ),
@@ -222,9 +370,75 @@ class _SelectedItemsPageState extends State<SelectedItemsPage> {
   }
 }
 
+class _AddSourceCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final List<Color> gradientColors;
+  final VoidCallback onTap;
+  final bool compact;
+
+  const _AddSourceCard({
+    required this.icon,
+    required this.label,
+    required this.gradientColors,
+    required this.onTap,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(compact ? 14 : 18),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(compact ? 14 : 18),
+            gradient: LinearGradient(
+              colors: gradientColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: gradientColors.first.withValues(alpha: 0.35),
+                blurRadius: compact ? 8 : 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 12 : 20,
+              vertical: compact ? 12 : 16,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Colors.white, size: compact ? 22 : 26),
+                SizedBox(width: compact ? 8 : 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: compact ? 14 : 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SelectedItemTile extends StatelessWidget {
   final int index;
   final SelectedMediaItem item;
+  final Color primary;
   final VoidCallback onEdit;
   final VoidCallback onRemove;
 
@@ -232,45 +446,150 @@ class _SelectedItemTile extends StatelessWidget {
     super.key,
     required this.index,
     required this.item,
+    required this.primary,
     required this.onEdit,
     required this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ReorderableDragStartListener(
-              index: index,
-              child: Icon(Icons.drag_handle, color: Colors.grey[600]),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () {},
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                ReorderableDragStartListener(
+                  index: index,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.drag_handle_rounded, color: Colors.grey.shade600, size: 22),
+                  ),
+                ),
+                _Thumbnail(path: item.path, isVideo: item.isVideo),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: Colors.black87,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: (item.isVideo ? Colors.amber : Colors.blue).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          item.isVideo ? 'Video' : 'Photo',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: item.isVideo ? Colors.amber.shade800 : Colors.blue.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _ActionButton(
+                      icon: Icons.edit_rounded,
+                      label: 'Edit',
+                      color: primary,
+                      onTap: onEdit,
+                    ),
+                    const SizedBox(height: 6),
+                    _ActionButton(
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Remove',
+                      color: Colors.red.shade400,
+                      onTap: onRemove,
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            _Thumbnail(path: item.path, isVideo: item.isVideo),
-          ],
+          ),
         ),
-        title: Text(
-          item.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: onEdit,
-            ),
-            IconButton(
-              icon: const Icon(Icons.remove_circle_outline),
-              onPressed: onRemove,
-            ),
-          ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -286,16 +605,37 @@ class _Thumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: SizedBox(
-        width: 56,
-        height: 56,
-        child: isVideo
-            ? _VideoThumb(path: path)
-            : (path.startsWith('http')
-                ? Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image))
-                : Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image))),
+      borderRadius: BorderRadius.circular(12),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: 72,
+            height: 72,
+            child: isVideo
+                ? _VideoThumb(path: path)
+                : (path.startsWith('http')
+                    ? Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _placeholder())
+                    : Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => _placeholder())),
+          ),
+          if (isVideo)
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.25),
+              ),
+              child: const Icon(Icons.play_circle_filled_rounded, color: Colors.white, size: 32),
+            ),
+        ],
       ),
+    );
+  }
+
+  Widget _placeholder() {
+    return Container(
+      color: Colors.grey.shade200,
+      child: Icon(isVideo ? Icons.videocam_rounded : Icons.image_rounded, color: Colors.grey.shade500, size: 28),
     );
   }
 }
@@ -308,8 +648,8 @@ class _VideoThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (path.startsWith('http')) {
-      return Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.videocam));
+      return Image.network(path, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.videocam_rounded, size: 28));
     }
-    return Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.videocam));
+    return Image.file(File(path), fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.videocam_rounded, size: 28));
   }
 }

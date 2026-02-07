@@ -411,23 +411,24 @@ class _CarouselVideoPageState extends State<_CarouselVideoPage> {
   }
 }
 
-/// Swipeable carousel for posts with multiple media (post_type: carousel).
-class _CarouselMedia extends StatefulWidget {
-  final FeedEntity feed;
-  final String Function(String) normalizeUrl;
+/// Public swipeable carousel for a list of media items. Used by feed and profile for post_type: carousel.
+class CarouselMediaWidget extends StatefulWidget {
+  final List<FeedMediaItem> items;
   final double height;
+  final String Function(String) normalizeUrl;
 
-  const _CarouselMedia({
-    required this.feed,
-    required this.normalizeUrl,
+  const CarouselMediaWidget({
+    super.key,
+    required this.items,
     this.height = 280,
+    required this.normalizeUrl,
   });
 
   @override
-  State<_CarouselMedia> createState() => _CarouselMediaState();
+  State<CarouselMediaWidget> createState() => _CarouselMediaWidgetState();
 }
 
-class _CarouselMediaState extends State<_CarouselMedia> {
+class _CarouselMediaWidgetState extends State<CarouselMediaWidget> {
   late PageController _pageController;
   int _currentPage = 0;
 
@@ -445,7 +446,7 @@ class _CarouselMediaState extends State<_CarouselMedia> {
 
   @override
   Widget build(BuildContext context) {
-    final items = widget.feed.mediaItems ?? [];
+    final items = widget.items;
     if (items.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -551,6 +552,30 @@ class _CarouselMediaState extends State<_CarouselMedia> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Swipeable carousel for posts with multiple media (post_type: carousel).
+class _CarouselMedia extends StatelessWidget {
+  final FeedEntity feed;
+  final String Function(String) normalizeUrl;
+  final double height;
+
+  const _CarouselMedia({
+    required this.feed,
+    required this.normalizeUrl,
+    this.height = 280,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final items = feed.mediaItems ?? [];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return CarouselMediaWidget(
+      items: items,
+      height: height,
+      normalizeUrl: normalizeUrl,
     );
   }
 }
@@ -926,8 +951,14 @@ class _FeedItemWidgetState extends State<FeedItemWidget>
           ),
           const SizedBox(height: 8),
 
-          // media
-          if (widget.feed.mediaType == 'video' &&
+          // media — check carousel first so multi-media posts show slider (not single video/image)
+          if ((widget.feed.mediaItems?.length ?? 0) > 1)
+            _CarouselMedia(
+              feed: widget.feed,
+              normalizeUrl: _normalizeUrl,
+              height: 280,
+            )
+          else if (widget.feed.mediaType == 'video' &&
               _controller != null &&
               _controller!.value.isInitialized)
             GestureDetector(
@@ -1018,12 +1049,6 @@ class _FeedItemWidgetState extends State<FeedItemWidget>
                         ),
                       ],
                     ),
-            )
-          else if ((widget.feed.mediaItems?.length ?? 0) > 1)
-            _CarouselMedia(
-              feed: widget.feed,
-              normalizeUrl: _normalizeUrl,
-              height: 280,
             )
           else if ((widget.feed.mediaType == 'image' || widget.feed.mediaType == 'carousel') &&
               widget.feed.mediaFile.isNotEmpty)
@@ -1122,6 +1147,7 @@ class _FeedItemWidgetState extends State<FeedItemWidget>
                         mediaFile: widget.feed.mediaFile,
                         mediaType: widget.feed.mediaType,
                         caption: widget.feed.caption,
+                        postId: widget.feed.id,
                       ),
                     ),
                   ),

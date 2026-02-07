@@ -57,7 +57,24 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- App Links: open shared post links (https://staging.api.kakan.co/v1/posts/user-posts/...) in app -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/>
+                <data android:host="staging.api.kakan.co"/>
+                <data android:pathPrefix="/v1/posts/user-posts/"/>
+            </intent-filter>
         </activity>
+
+        <!-- image_cropper: uCrop activity for crop/rotate (UCropTheme keeps toolbar above nav bar) -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/UCropTheme"
+            android:exported="false" />
 
         <!-- Required by Flutter tooling -->
         <meta-data

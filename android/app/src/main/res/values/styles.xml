@@ -15,4 +15,12 @@
         <item name="android:windowBackground">@android:color/white</item>
         <item name="android:forceDarkAllowed">false</item>
     </style>
+
+    <!-- image_cropper / uCrop: keep toolbar above nav bar and match app UI -->
+    <style name="UCropTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ucrop_nav_bar</item>
+        <item name="android:navigationBarColor">@color/ucrop_nav_bar</item>
+        <item name="android:statusBarColor">@color/ucrop_status_bar</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
 </resources>

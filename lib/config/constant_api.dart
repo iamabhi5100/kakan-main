@@ -2,6 +2,15 @@ class ConstantApi {
   static const String baseUrl = 'https://staging.api.kakan.co';
   static const String apiVersion = '1';
 
+  /// URL shared externally: opens app if installed, else opens in browser. Change when app/website link is ready.
+  static const String appShareUrl = 'https://www.easyletters.in';
+
+  /// Share URL for a post: API URL shared so recipient can open the post (e.g. in app or web).
+  static String shareUrlForPost(String postId) => '$baseUrl${userPost(postId)}';
+
+  /// Share URL for a reel; opening it in app shows the reel.
+  static String shareUrlForReel(String reelId) => '$appShareUrl/reel/$reelId';
+
   // Login Feature
   static const String getOtp = '/v$apiVersion/user/auth/get-otp/';
   static const String verifyOtp = '/v$apiVersion/user/auth/verify/';
@@ -15,6 +24,8 @@ class ConstantApi {
 
   // Post Feature
   static const String createPost = '/v$apiVersion/posts/';
+  /// GET single post by id: {{base_url}}/v{{api_version}}/posts/user-posts/{{user_post_id}}/
+  static String userPost(String userPostId) => '/v$apiVersion/posts/user-posts/$userPostId/';
 
   // Profile Image Feature
   static const String uploadProfileimage = '/v$apiVersion/user/%s/upload-profile-picture/';

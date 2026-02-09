@@ -405,6 +405,7 @@ class _AudioEditorPageState extends State<AudioEditorPage>
       builder: (context) => ShareScreen(
         mediaFile: trimmed,
         mediaType: 'audio',
+        title: widget.title,
         caption: widget.title,
       ),
     );

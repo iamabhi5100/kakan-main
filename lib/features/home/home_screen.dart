@@ -1,7 +1,9 @@
 // lib/features/home/home_screen.dart
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:kakan/config/constant_api.dart';
@@ -43,6 +45,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<Map<String, dynamic>>? _authStatusFuture;
   final ApiService _apiService = di.sl<ApiService>();
   final SessionManager _sessionManager = di.sl<SessionManager>();
+  DateTime? _lastBackPressTime;
+  static const _doubleBackWindow = Duration(seconds: 2);
 
   @override
   void initState() {
@@ -59,6 +63,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.didChangeDependencies();
     if (kDebugMode) {
       print('HomeScreen: didChangeDependencies called');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // When app comes back to foreground (e.g. user reopened after double-tap exit),
+    // reset so the next single back shows toast instead of closing.
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() => _lastBackPressTime = null);
     }
   }
 
@@ -290,23 +304,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
     }
 
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => di.sl<ProfilePostsBloc>()),
-        BlocProvider(create: (_) => di.sl<FeedBloc>()),
-        BlocProvider(create: (_) => di.sl<ProfiledetailsBloc>()),
-      ],
-      child: PopScope(
-        onPopInvoked: (didPop) {
-          if (didPop) {
-            if (kDebugMode) {
-              print('HomeScreen: Pop invoked, refreshing state');
-            }
-            setState(() {
-              _authStatusFuture = _checkAuthStatus();
-            });
-          }
-        },
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        final now = DateTime.now();
+        final withinWindow = _lastBackPressTime != null &&
+            now.difference(_lastBackPressTime!).inMilliseconds < _doubleBackWindow.inMilliseconds;
+        if (withinWindow) {
+          SystemNavigator.pop();
+          return;
+        }
+        setState(() => _lastBackPressTime = now);
+        Fluttertoast.showToast(
+          msg: 'Press back again to exit',
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.BOTTOM,
+        );
+      },
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(create: (_) => di.sl<ProfilePostsBloc>()),
+          BlocProvider(create: (_) => di.sl<FeedBloc>()),
+          BlocProvider(create: (_) => di.sl<ProfiledetailsBloc>()),
+        ],
         child: Scaffold(
           backgroundColor: Colors.white,
           appBar: _currentIndex == 0

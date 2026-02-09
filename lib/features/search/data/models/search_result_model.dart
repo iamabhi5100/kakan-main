@@ -1,5 +1,6 @@
 // lib/features/search/data/models/search_result_model.dart
 
+import '../../domain/entities/search_media_item.dart';
 import '../../domain/entities/search_result.dart';
 
 class SearchResultModel extends SearchResult {
@@ -18,6 +19,7 @@ class SearchResultModel extends SearchResult {
     String? profileImage,
     int? followersCount,
     bool? isFollowed,
+    List<SearchMediaItem>? mediaItems,
   }) : super(
           id: id,
           username: username,
@@ -33,6 +35,7 @@ class SearchResultModel extends SearchResult {
           profileImage: profileImage,
           followersCount: followersCount,
           isFollowed: isFollowed,
+          mediaItems: mediaItems,
         );
 
   /// When you get a `/v1/user/` result

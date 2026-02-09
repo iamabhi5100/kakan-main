@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.kakan",
+      "sha256_cert_fingerprints": [
+        "8A:18:85:EF:89:40:CB:CE:F1:92:76:BB:D0:F0:EB:DF:A9:C2:81:72:88:59:FF:15:06:91:AD:5F:78:A2:DA:35"
+      ]
+    }
+  }
+]

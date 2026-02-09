@@ -1,13 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:video_player/video_player.dart';
+import 'package:http/http.dart' as http;
 import 'package:kakan/features/reels/domain/entities/reel_entity.dart';
 import 'package:kakan/features/reels/domain/entities/share_target_entity.dart';
 import 'package:kakan/features/reels/presentation/bloc/reel_lists/reels_bloc.dart';
 import 'package:kakan/core/utils/session_manager.dart';
 import 'package:kakan/injection_container.dart' as di;
 import 'package:gap/gap.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:kakan/features/reels/presentation/widgets/reel_comments_screen.dart';
@@ -509,27 +513,95 @@ class _ReelItemState extends State<ReelItem> {
     });
   }
 
-  Future<void> _shareExternally() async {
-    // Share link opens app if installed (deep link to reel), else opens website
-    final String shareLink = ConstantApi.shareUrlForReel(widget.reel.id);
-    final String message =
-        'Check out this reel: $shareLink\n\nTitle: ${widget.reel.title}\nCaption: ${widget.reel.caption}';
+  Future<String?> _downloadReelVideoToTemp(String url) async {
     try {
-      await Share.share(
-        message,
-        subject: 'Shared Reel',
-        sharePositionOrigin: Rect.fromLTWH(
-          0,
-          0,
-          MediaQuery.of(context).size.width,
-          MediaQuery.of(context).size.height / 2,
-        ),
-      );
+      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200 || resp.bodyBytes.isEmpty) return null;
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/reel_share_${DateTime.now().millisecondsSinceEpoch}.mp4');
+      await file.writeAsBytes(resp.bodyBytes);
+      return file.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _shareExternally() async {
+    // Same promo + link + title/caption format as post share (with "title :-" and "caption :-" labels)
+    final lines = <String>[
+      ConstantApi.sharePromoMessage,
+      'Download: ${ConstantApi.shareDownloadLink}',
+      '',
+    ];
+    if (widget.reel.title.trim().isNotEmpty) lines.add('title :- ${widget.reel.title.trim()}');
+    if (widget.reel.caption.trim().isNotEmpty) lines.add('caption :- ${widget.reel.caption.trim()}');
+    final message = lines.join('\n');
+    final shareOrigin = Rect.fromLTWH(
+      0,
+      0,
+      MediaQuery.of(context).size.width,
+      MediaQuery.of(context).size.height / 2,
+    );
+    try {
+      final videoUrl = widget.reel.mediaFile.trim();
+      final isVideoUrl = videoUrl.startsWith('http') && widget.reel.mediaType == 'video';
+      if (isVideoUrl && videoUrl.isNotEmpty) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => const Center(
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Preparing video…'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        final path = await _downloadReelVideoToTemp(videoUrl);
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        if (path != null) {
+          await Share.shareXFiles(
+            [XFile(path)],
+            text: message,
+            subject: widget.reel.title.trim().isNotEmpty ? widget.reel.title : 'Shared Reel',
+            sharePositionOrigin: shareOrigin,
+          );
+        } else {
+          await Share.share(
+            message,
+            subject: widget.reel.title.trim().isNotEmpty ? widget.reel.title : 'Shared Reel',
+            sharePositionOrigin: shareOrigin,
+          );
+        }
+      } else {
+        await Share.share(
+          message,
+          subject: widget.reel.title.trim().isNotEmpty ? widget.reel.title : 'Shared Reel',
+          sharePositionOrigin: shareOrigin,
+        );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reel shared externally')),
+        );
+      }
       print('DEBUG: Shared reel externally');
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to share: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to share: $e')),
+        );
+      }
       print('ERROR: Failed to share externally: $e');
     }
   }

@@ -344,6 +344,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
       builder: (_) => ShareScreen(
         mediaFile: path,
         mediaType: 'video',
+        title: widget.title,
         caption: widget.title,
       ),
     );

@@ -1,31 +1,41 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gap/gap.dart';
+import 'package:http/http.dart' as http;
 import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/core/error/failures.dart';
 import 'package:kakan/core/usecases/usecase.dart';
 import 'package:kakan/features/home/data/models/share_models.dart';
+import 'package:kakan/features/home/model/entities/feed_entity.dart';
 import 'package:kakan/features/home/model/usecases/get_users_to_share.dart';
 import 'package:kakan/features/home/model/usecases/send_share_message.dart';
 import 'package:kakan/injection_container.dart' as di;
-import 'package:toastification/toastification.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:flutter/services.dart';
-import 'dart:io';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:toastification/toastification.dart';
 
 class ShareScreen extends StatefulWidget {
   final String? mediaFile; // Can be a URL or local file path
   final String? mediaType;
   final String? caption;
+  /// Post title; included in shared text.
+  final String? title;
   /// Post ID for share link; when set, shared link opens this post in app (e.g. appShareUrl/post/{postId}).
   final String? postId;
+  /// All media items (carousel or single); image URLs are downloaded and attached when sharing externally.
+  final List<FeedMediaItem>? mediaItems;
 
   const ShareScreen({
     super.key,
     this.mediaFile,
     this.mediaType,
     this.caption,
+    this.title,
     this.postId,
+    this.mediaItems,
   });
 
   @override
@@ -121,7 +131,7 @@ class _ShareScreenState extends State<ShareScreen> {
       final selected = _selectedItems.map((index) => _filteredItems[index]).toList();
       final sendMessage = di.sl<SendShareMessage>();
       final messageType = widget.mediaType ?? 'text';
-      final content = widget.caption != null ? 'Shared post: ${widget.caption}' : 'Shared a post';
+      final content = _buildFullShareMessage();
 
       bool hasError = false;
       for (final item in selected) {
@@ -171,41 +181,180 @@ class _ShareScreenState extends State<ShareScreen> {
     }
   }
 
-  Future<void> _shareExternally() async {
-    // Share link opens app if installed (deep link to post), else opens website
-    final String shareLink = widget.postId != null && widget.postId!.isNotEmpty
-        ? ConstantApi.shareUrlForPost(widget.postId!)
-        : ConstantApi.appShareUrl;
-    final String message = 'Check out this post: $shareLink\n\nCaption: ${widget.caption ?? 'No caption'}';
+  /// Builds share text for external share: "title :- ..." and "caption :- ..." lines.
+  String _buildShareMessageForExternal() {
+    final parts = <String>[];
+    if (widget.title != null && widget.title!.trim().isNotEmpty) {
+      parts.add('title :- ${widget.title!.trim()}');
+    }
+    if (widget.caption != null && widget.caption!.trim().isNotEmpty) {
+      parts.add('caption :- ${widget.caption!.trim()}');
+    }
+    return parts.join('\n');
+  }
+
+  /// Full share message: promo + download link + title + caption (used as caption with media when 1 file).
+  String _buildFullShareMessage() {
+    final lines = <String>[
+      ConstantApi.sharePromoMessage,
+      'Download: ${ConstantApi.shareDownloadLink}',
+      '',
+    ];
+    final titleCaption = _buildShareMessageForExternal();
+    if (titleCaption.trim().isNotEmpty) {
+      lines.add(titleCaption);
+    }
+    return lines.join('\n');
+  }
+
+  /// Supported media types for download-and-attach: image, video, audio. Carousel uses [mediaItems] or fallback.
+  static const _attachableTypes = ['image', 'video', 'audio'];
+
+  /// Infers media type from URL (e.g. .mp4 -> video, .mp3 -> audio) for carousel fallback.
+  static String _inferTypeFromUrl(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('.mp4') || lower.contains('.webm') || lower.contains('.mov')) return 'video';
+    if (lower.contains('.mp3') || lower.contains('.m4a') || lower.contains('.ogg') || lower.contains('.wav')) return 'audio';
+    return 'image';
+  }
+
+  /// Collects (url, type) for all attachable media from [mediaItems] or single [mediaFile].
+  /// Carousel: uses all [mediaItems]; if missing, falls back to [mediaFile] with type inferred from URL.
+  List<({String url, String type})> _mediaToAttach() {
+    final list = <({String url, String type})>[];
+    if (widget.mediaItems != null && widget.mediaItems!.isNotEmpty) {
+      for (final m in widget.mediaItems!) {
+        final type = m.type;
+        final resolvedType = type == 'carousel' ? _inferTypeFromUrl(m.mediaFile) : type;
+        if ((_attachableTypes.contains(type) || type == 'carousel') && m.mediaFile.isNotEmpty) {
+          list.add((url: m.mediaFile, type: resolvedType));
+        }
+      }
+    } else if (widget.mediaFile != null &&
+        widget.mediaFile!.trim().isNotEmpty &&
+        !File(widget.mediaFile!).existsSync()) {
+      final url = widget.mediaFile!.trim();
+      if (!url.startsWith('http')) return list;
+      final type = widget.mediaType;
+      if (type != null && (_attachableTypes.contains(type) || type == 'carousel')) {
+        final resolvedType = type == 'carousel' ? _inferTypeFromUrl(url) : type;
+        list.add((url: url, type: resolvedType));
+      }
+    }
+    return list;
+  }
+
+  /// Picks file extension from URL and media type for saving.
+  String _extensionFor(String url, String type) {
+    final lower = url.toLowerCase();
+    if (type == 'video') {
+      if (lower.contains('.mp4')) return 'mp4';
+      if (lower.contains('.webm')) return 'webm';
+      if (lower.contains('.mov')) return 'mov';
+      return 'mp4';
+    }
+    if (type == 'audio') {
+      if (lower.contains('.mp3')) return 'mp3';
+      if (lower.contains('.m4a')) return 'm4a';
+      if (lower.contains('.ogg')) return 'ogg';
+      if (lower.contains('.wav')) return 'wav';
+      return 'mp3';
+    }
+    // image
+    if (lower.contains('.png')) return 'png';
+    if (lower.contains('.gif')) return 'gif';
+    if (lower.contains('.webp')) return 'webp';
+    return 'jpg';
+  }
+
+  /// Downloads media from [url] to a temp file; returns path or null on failure.
+  Future<String?> _downloadMediaToTemp(String url, String type) async {
     try {
-      // If we have a local media file, share it along with the app/website link
+      final resp = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200 || resp.bodyBytes.isEmpty) return null;
+      final dir = await getTemporaryDirectory();
+      final ext = _extensionFor(url, type);
+      final file = File('${dir.path}/share_${DateTime.now().millisecondsSinceEpoch}_${resp.bodyBytes.length}.$ext');
+      await file.writeAsBytes(resp.bodyBytes);
+      return file.path;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _shareExternally() async {
+    final shareOrigin = Rect.fromLTWH(
+      0,
+      0,
+      MediaQuery.of(context).size.width,
+      MediaQuery.of(context).size.height / 2,
+    );
+
+    try {
+      // 1) Local file already on device (e.g. from editor) – one file + text = one message in WhatsApp
       final hasLocalFile = widget.mediaFile != null &&
           widget.mediaFile!.isNotEmpty &&
           File(widget.mediaFile!).existsSync();
       if (hasLocalFile) {
-        await Share.shareXFiles(
+        await _shareFilesWithCaptionIfSingle(
           [XFile(widget.mediaFile!)],
-          text: message,
-          subject: 'Shared Post',
-          sharePositionOrigin: Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width, MediaQuery.of(context).size.height / 2),
+          shareOrigin,
         );
-      } else {
-        await Share.share(
-          message,
-          subject: 'Shared Post',
-          sharePositionOrigin: Rect.fromLTWH(0, 0, MediaQuery.of(context).size.width, MediaQuery.of(context).size.height / 2),
-        );
+        if (mounted) _onShareComplete(hadFiles: true, multipleFiles: false);
+        return;
       }
-      if (mounted) {
-        toastification.show(
-          context: context,
-          title: const Text('Post shared externally'),
-          type: ToastificationType.success,
-          style: ToastificationStyle.fillColored,
-          autoCloseDuration: const Duration(seconds: 3),
-        );
+
+      // 2) Media URLs (image, video, audio): download then attach
+      final mediaList = _mediaToAttach();
+      if (mediaList.isNotEmpty) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => const Center(
+              child: Card(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Preparing media…'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+        final files = <XFile>[];
+        for (final item in mediaList) {
+          final path = await _downloadMediaToTemp(item.url, item.type);
+          if (path != null) files.add(XFile(path));
+        }
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+        if (files.isNotEmpty) {
+          await _shareFilesWithCaptionIfSingle(files, shareOrigin);
+          if (mounted) _onShareComplete(hadFiles: true, multipleFiles: files.length > 1);
+        } else {
+          await Share.share(
+            _buildFullShareMessage(),
+            subject: widget.title?.trim().isNotEmpty == true ? widget.title : 'Shared Post',
+            sharePositionOrigin: shareOrigin,
+          );
+          if (mounted) _onShareComplete(hadFiles: false);
+        }
+        return;
       }
-      print('DEBUG: Shared post externally');
+
+      // 3) Text only (no media) – include promo + link + title + caption
+      await Share.share(
+        _buildFullShareMessage(),
+        subject: widget.title?.trim().isNotEmpty == true ? widget.title : 'Shared Post',
+        sharePositionOrigin: shareOrigin,
+      );
+      if (mounted) _onShareComplete(hadFiles: false);
     } catch (e) {
       if (mounted) {
         toastification.show(
@@ -218,6 +367,49 @@ class _ShareScreenState extends State<ShareScreen> {
       }
       print('ERROR: Failed to share externally: $e');
     }
+  }
+
+  /// Share files. When exactly one file: add caption so WhatsApp shows one message (text + media).
+  /// When multiple files: share only files (Android crashes if we add text with multiple streams).
+  Future<void> _shareFilesWithCaptionIfSingle(List<XFile> files, Rect shareOrigin) async {
+    final message = _buildFullShareMessage();
+    if (files.length == 1) {
+      await Share.shareXFiles(
+        files,
+        text: message,
+        subject: widget.title?.trim().isNotEmpty == true ? widget.title : 'Shared Post',
+        sharePositionOrigin: shareOrigin,
+      );
+    } else {
+      await Share.shareXFiles(
+        files,
+        sharePositionOrigin: shareOrigin,
+      );
+      if (message.trim().isNotEmpty) {
+        Clipboard.setData(ClipboardData(text: message));
+      }
+    }
+  }
+
+  void _onShareComplete({required bool hadFiles, bool multipleFiles = false}) {
+    if (hadFiles && multipleFiles) {
+      toastification.show(
+        context: context,
+        title: const Text('Media shared. Caption copied – paste in chat to add message.'),
+        type: ToastificationType.success,
+        style: ToastificationStyle.fillColored,
+        autoCloseDuration: const Duration(seconds: 4),
+      );
+    } else {
+      toastification.show(
+        context: context,
+        title: const Text('Post shared externally'),
+        type: ToastificationType.success,
+        style: ToastificationStyle.fillColored,
+        autoCloseDuration: const Duration(seconds: 3),
+      );
+    }
+    print('DEBUG: Shared post externally');
   }
 
   Future<void> _copyLink() async {

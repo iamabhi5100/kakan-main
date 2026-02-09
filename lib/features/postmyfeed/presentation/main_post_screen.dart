@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:kakan/config/theme.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_bloc.dart';
@@ -50,8 +51,116 @@ class _MainPostScreenState extends State<MainPostScreen> {
           Navigator.pop(ctx);
           _showLibraryModal(context, mediaType);
         },
+        onCameraTap: mediaType == 'video'
+            ? () {
+                Navigator.pop(ctx);
+                _pickFromCamera(context);
+              }
+            : null,
       ),
     );
+  }
+
+  Future<void> _pickFromCamera(BuildContext context) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Capture with camera',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Record a video or take a photo',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey.shade600,
+                    ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFF5856D6),
+                  child: Icon(Icons.videocam_rounded, color: Colors.white),
+                ),
+                title: const Text('Record video'),
+                subtitle: const Text('Capture a new video'),
+                onTap: () => Navigator.pop(ctx, 'video'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFF5856D6),
+                  child: Icon(Icons.camera_alt_rounded, color: Colors.white),
+                ),
+                title: const Text('Take photo'),
+                subtitle: const Text('Capture a new photo'),
+                onTap: () => Navigator.pop(ctx, 'photo'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    try {
+      await _showLoading();
+      final picker = ImagePicker();
+      if (choice == 'video') {
+        final xFile = await picker.pickVideo(source: ImageSource.camera);
+        if (xFile != null && mounted) {
+          final item = SelectedMediaItem(
+            path: xFile.path,
+            type: 'video',
+            name: 'Camera video',
+          );
+          _hideLoading();
+          context.push('/selected-items', extra: [item]).then((_) => _hideLoading());
+        } else {
+          _hideLoading();
+        }
+      } else {
+        final xFile = await picker.pickImage(source: ImageSource.camera);
+        if (xFile != null && mounted) {
+          final item = SelectedMediaItem(
+            path: xFile.path,
+            type: 'image',
+            name: 'Camera photo',
+          );
+          _hideLoading();
+          context.push('/selected-items', extra: [item]).then((_) => _hideLoading());
+        } else {
+          _hideLoading();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _hideLoading();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Camera error: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _pickFromGallery(String mediaType) async {
@@ -339,11 +448,13 @@ class _MediaSourceSheet extends StatelessWidget {
   final String mediaType;
   final VoidCallback onGalleryTap;
   final VoidCallback onLibraryTap;
+  final VoidCallback? onCameraTap;
 
   const _MediaSourceSheet({
     required this.mediaType,
     required this.onGalleryTap,
     required this.onLibraryTap,
+    this.onCameraTap,
   });
 
   @override
@@ -416,6 +527,19 @@ class _MediaSourceSheet extends StatelessWidget {
                 ],
                 onTap: onLibraryTap,
               ),
+              if (onCameraTap != null) ...[
+                const SizedBox(height: 14),
+                _SourceOptionCard(
+                  icon: Icons.camera_alt_rounded,
+                  title: 'Capture camera',
+                  subtitle: 'Record a video or take a photo',
+                  gradientColors: [
+                    const Color(0xFF2E7D32),
+                    const Color(0xFF1B5E20),
+                  ],
+                  onTap: onCameraTap!,
+                ),
+              ],
             ],
           ),
         ),

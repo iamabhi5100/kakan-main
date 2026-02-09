@@ -158,6 +158,8 @@ The backend team only needs to paste the strings they receive from the app team;
 
 ## 6. Summary checklist for backend
 
+**Deployable asset:** The ready-to-use file is at `public/.well-known/assetlinks.json` in this repo. The backend can copy it or serve it at `GET /.well-known/assetlinks.json` on `staging.api.kakan.co`.
+
 - [ ] Add a route (or static file) so that  
   `GET https://staging.api.kakan.co/.well-known/assetlinks.json`  
   returns HTTP 200 with the JSON body.

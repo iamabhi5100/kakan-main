@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
@@ -70,6 +71,98 @@ class _SelectedItemsPageState extends State<SelectedItemsPage> {
       list.add(SelectedMediaItem(path: path, type: type, name: f.name));
     }
     setState(() => _items.addAll(list));
+  }
+
+  Future<void> _addFromCamera() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Capture with camera',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: Colors.black87,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Record a video or take a photo',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey.shade600,
+                    ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFF5856D6),
+                  child: Icon(Icons.videocam_rounded, color: Colors.white),
+                ),
+                title: const Text('Record video'),
+                subtitle: const Text('Capture a new video'),
+                onTap: () => Navigator.pop(ctx, 'video'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFF5856D6),
+                  child: Icon(Icons.camera_alt_rounded, color: Colors.white),
+                ),
+                title: const Text('Take photo'),
+                subtitle: const Text('Capture a new photo'),
+                onTap: () => Navigator.pop(ctx, 'photo'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    try {
+      final picker = ImagePicker();
+      if (choice == 'video') {
+        final xFile = await picker.pickVideo(source: ImageSource.camera);
+        if (xFile != null && mounted) {
+          setState(() => _items.add(SelectedMediaItem(
+                path: xFile.path,
+                type: 'video',
+                name: 'Camera video',
+              )));
+        }
+      } else {
+        final xFile = await picker.pickImage(source: ImageSource.camera);
+        if (xFile != null && mounted) {
+          setState(() => _items.add(SelectedMediaItem(
+                path: xFile.path,
+                type: 'image',
+                name: 'Camera photo',
+              )));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Camera error: $e')),
+        );
+      }
+    }
   }
 
   void _openLibrary() {
@@ -223,7 +316,7 @@ class _SelectedItemsPageState extends State<SelectedItemsPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Add photos or videos from your gallery,\nor pick from your library.',
+              'Add photos or videos from your gallery,\nlibrary, or capture with camera.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.grey.shade600,
                     height: 1.4,
@@ -254,6 +347,18 @@ class _SelectedItemsPageState extends State<SelectedItemsPage> {
                       const Color(0xFF3D4D6B),
                     ],
                     onTap: _openLibrary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: _AddSourceCard(
+                    icon: Icons.camera_alt_rounded,
+                    label: 'Camera',
+                    gradientColors: [
+                      const Color(0xFF2E7D32),
+                      const Color(0xFF1B5E20),
+                    ],
+                    onTap: _addFromCamera,
                   ),
                 ),
               ],
@@ -330,6 +435,19 @@ class _SelectedItemsPageState extends State<SelectedItemsPage> {
                     const Color(0xFF3D4D6B),
                   ],
                   onTap: _openLibrary,
+                  compact: true,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _AddSourceCard(
+                  icon: Icons.camera_alt_rounded,
+                  label: 'Camera',
+                  gradientColors: [
+                    const Color(0xFF2E7D32),
+                    const Color(0xFF1B5E20),
+                  ],
+                  onTap: _addFromCamera,
                   compact: true,
                 ),
               ),

@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:kakan/config/theme.dart';
 import 'package:kakan/features/myfiles/domain/entities/download_entity.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/delete_download/delete_download_bloc.dart';
+import 'package:kakan/features/myfiles/presentation/pages/myfiles_audio_feed_page.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/delete_download/delete_download_event.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/delete_download/delete_download_state.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_bloc.dart';
@@ -488,54 +489,62 @@ class _AudioMyfilesWidgetState extends State<AudioMyfilesWidget> {
                         final download = state.downloads[index];
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 120,
-                                height: 80,
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                  child: Image.network(
-                                    download.thumbnail ?? '',
-                                    width: 120,
-                                    height: 80,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        Image.asset('assets/images/youtubeicon.png'),
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => MyFilesAudioFeedPage(download: download),
+                                ),
+                              );
+                            },
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 120,
+                                  height: 80,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    child: Image.network(
+                                      download.thumbnail ?? '',
+                                      width: 120,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) =>
+                                          Image.asset('assets/images/youtubeicon.png'),
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const Gap(12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      download.title ?? 'Untitled Song',
-                                      style: appTheme.textTheme.titleSmall
-                                          ?.copyWith(fontWeight: FontWeight.bold),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const Gap(4),
-                                    Text(
-                                      download.created,
-                                      style: appTheme.textTheme.bodySmall?.copyWith(
-                                        color: Colors.grey.shade600,
+                                const Gap(12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        download.title ?? 'Untitled Song',
+                                        style: appTheme.textTheme.titleSmall
+                                            ?.copyWith(fontWeight: FontWeight.bold),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
-                                    const Gap(4),
-                                    Text(
-                                      download.duration ?? '00:00',
-                                      style: appTheme.textTheme.bodySmall?.copyWith(
-                                        color: Colors.grey.shade600,
+                                      const Gap(4),
+                                      Text(
+                                        download.created,
+                                        style: appTheme.textTheme.bodySmall?.copyWith(
+                                          color: Colors.grey.shade600,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                      const Gap(4),
+                                      Text(
+                                        download.duration ?? '00:00',
+                                        style: appTheme.textTheme.bodySmall?.copyWith(
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              PopupMenuButton<AudioMenuOption>(
+                                PopupMenuButton<AudioMenuOption>(
                                 icon: const Icon(Icons.more_horiz_rounded,
                                     color: Colors.grey),
                                 enabled: !_isSettingRingtone,
@@ -562,8 +571,9 @@ class _AudioMyfilesWidgetState extends State<AudioMyfilesWidget> {
                                     child: Text('Delete'),
                                   ),
                                 ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       },

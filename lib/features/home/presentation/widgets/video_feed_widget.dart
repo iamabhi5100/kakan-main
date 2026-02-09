@@ -192,7 +192,9 @@ class _VideoFeedWidgetState extends State<VideoFeedWidget> {
         mediaFile: widget.post?.mediaFile,
         mediaType: widget.post?.mediaType,
         caption: widget.post?.caption,
+        title: widget.post?.title,
         postId: widget.post?.id,
+        mediaItems: widget.post?.mediaItems,
       ),
     );
   }

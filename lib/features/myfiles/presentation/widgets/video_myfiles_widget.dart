@@ -11,6 +11,7 @@ import 'package:kakan/config/constant_api.dart';
 import 'package:kakan/core/network/api_service.dart';
 import 'package:kakan/features/myfiles/domain/entities/download_entity.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/delete_download/delete_download_bloc.dart';
+import 'package:kakan/features/myfiles/presentation/pages/myfiles_video_feed_page.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/delete_download/delete_download_event.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/delete_download/delete_download_state.dart';
 import 'package:kakan/features/myfiles/presentation/bloc/downloads/downloads_bloc.dart';
@@ -184,86 +185,95 @@ class _VideoMyfilesWidgetState extends State<VideoMyfilesWidget> {
                   final download = state.downloads[index];
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 120,
-                          height: 80,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8.0),
-                            child: Image.network(
-                              download.thumbnail ?? '',
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Center(
-                                child: Image.asset('assets/images/youtubeicon.png'),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => MyFilesVideoFeedPage(download: download),
+                          ),
+                        );
+                      },
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 120,
+                            height: 80,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8.0),
+                              child: Image.network(
+                                download.thumbnail ?? '',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Center(
+                                  child: Image.asset('assets/images/youtubeicon.png'),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const Gap(12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                download.title ?? 'Untitled Video',
-                                style: appTheme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
+                          const Gap(12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  download.title ?? 'Untitled Video',
+                                  style: appTheme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
+                                const Gap(4),
+                                Text(
+                                  download.created,
+                                  style: appTheme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                const Gap(4),
+                                Text(
+                                  download.duration ?? '00:00',
+                                  style: appTheme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          PopupMenuButton<VideoMenuOption>(
+                            icon: const Icon(Icons.more_horiz_rounded, color: Colors.grey),
+                            onSelected: (option) {
+                              switch (option) {
+                                case VideoMenuOption.exportAudio:
+                                  _exportToAudio(context, download);
+                                  break;
+                                case VideoMenuOption.editVideo:
+                                  break;
+                                case VideoMenuOption.delete:
+                                  context
+                                      .read<DeleteDownloadBloc>()
+                                      .add(DeleteDownloadEvent(mediaId: download.id));
+                                  break;
+                              }
+                            },
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: VideoMenuOption.exportAudio,
+                                child: Text('Export Audio'),
                               ),
-                              const Gap(4),
-                              Text(
-                                download.created,
-                                style: appTheme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey.shade600,
-                                ),
+                              PopupMenuItem(
+                                value: VideoMenuOption.editVideo,
+                                enabled: false,
+                                child: Text('Edit Video'),
                               ),
-                              const Gap(4),
-                              Text(
-                                download.duration ?? '00:00',
-                                style: appTheme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.grey.shade600,
-                                ),
+                              PopupMenuItem(
+                                value: VideoMenuOption.delete,
+                                child: Text('Delete'),
                               ),
                             ],
                           ),
-                        ),
-                        PopupMenuButton<VideoMenuOption>(
-                          icon: const Icon(Icons.more_horiz_rounded, color: Colors.grey),
-                          onSelected: (option) {
-                            switch (option) {
-                              case VideoMenuOption.exportAudio:
-                                _exportToAudio(context, download);
-                                break;
-                              case VideoMenuOption.editVideo:
-                                break;
-                              case VideoMenuOption.delete:
-                                context
-                                    .read<DeleteDownloadBloc>()
-                                    .add(DeleteDownloadEvent(mediaId: download.id));
-                                break;
-                            }
-                          },
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(
-                              value: VideoMenuOption.exportAudio,
-                              child: Text('Export Audio'),
-                            ),
-                            PopupMenuItem(
-                              value: VideoMenuOption.editVideo,
-                              enabled: false,
-                              child: Text('Edit Video'),
-                            ),
-                            PopupMenuItem(
-                              value: VideoMenuOption.delete,
-                              child: Text('Delete'),
-                            ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },

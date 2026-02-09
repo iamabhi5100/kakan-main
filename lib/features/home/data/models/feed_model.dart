@@ -87,7 +87,7 @@ class FeedModel extends FeedEntity {
       caption: json['caption']?.toString() ?? '',
       mediaFile: mediaFile,
       thumbnail: thumbnail,
-      mediaItems: postType == 'carousel' && mediaItemsList.length > 1 ? mediaItemsList : null,
+      mediaItems: postType == 'carousel' && mediaItemsList.isNotEmpty ? mediaItemsList : null,
       privacy: json['privacy']?.toString() ?? '',
       likesCount: json['likes_count']?.toInt() ?? 0,
       repostCount: json['repost_count']?.toInt() ?? 0,

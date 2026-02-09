@@ -2,10 +2,14 @@ class ConstantApi {
   static const String baseUrl = 'https://staging.api.kakan.co';
   static const String apiVersion = '1';
 
-  /// URL shared externally: opens app if installed, else opens in browser. Change when app/website link is ready.
+  /// URL shared externally (e.g. for reels); post share uses [baseUrl] + post path.
   static const String appShareUrl = 'https://www.easyletters.in';
 
-  /// Share URL for a post: API URL shared so recipient can open the post (e.g. in app or web).
+  /// Message + link shown when sharing a post (e.g. "Created in Kakan – download at …").
+  static const String sharePromoMessage = 'This post was created in Kakan app.';
+  static const String shareDownloadLink = 'https://www.kakansocialnetworks.com';
+
+  /// Share URL for a post: uses API base so link opens in app (App Links) or hits your API.
   static String shareUrlForPost(String postId) => '$baseUrl${userPost(postId)}';
 
   /// Share URL for a reel; opening it in app shows the reel.

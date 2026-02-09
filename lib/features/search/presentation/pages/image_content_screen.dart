@@ -1,0 +1,212 @@
+// lib/features/search/presentation/pages/image_content_screen.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_bloc.dart';
+import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_event.dart';
+import 'package:kakan/features/home/presentation/bloc/feed_bloc/feed_state.dart';
+import 'package:kakan/features/home/presentation/widgets/share_screen.dart';
+import 'package:kakan/features/search/domain/entities/search_result.dart';
+import 'package:kakan/features/search/presentation/theme/search_theme.dart';
+import 'package:kakan/features/search/presentation/widgets/search_content_layout.dart';
+import 'package:kakan/injection_container.dart' as di;
+import 'package:toastification/toastification.dart';
+
+class ImageContentScreen extends StatefulWidget {
+  final SearchResult result;
+  const ImageContentScreen({super.key, required this.result});
+
+  @override
+  State<ImageContentScreen> createState() => _ImageContentScreenState();
+}
+
+class _ImageContentScreenState extends State<ImageContentScreen> {
+  late bool _flagLiked;
+  late int _likes;
+  late int _reposts;
+
+  @override
+  void initState() {
+    super.initState();
+    _flagLiked = widget.result.flagLiked ?? false;
+    _likes = widget.result.likesCount ?? 0;
+    _reposts = widget.result.repostCount ?? 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = widget.result;
+
+    return BlocProvider(
+      create: (_) => di.sl<FeedBloc>(),
+      child: Builder(
+        builder: (providerContext) => BlocListener<FeedBloc, FeedState>(
+          listener: (context, state) {
+            if (state is FeedActionSuccess) {
+              if (mounted) {
+                toastification.show(
+                  context: context,
+                  title: Text(state.newPostId != null
+                      ? 'Repost created successfully'
+                      : 'Action completed successfully'),
+                  type: ToastificationType.success,
+                  style: ToastificationStyle.fillColored,
+                  autoCloseDuration: const Duration(seconds: 3),
+                );
+                if (state.newPostId != null) {
+                  context.read<FeedBloc>().add(const RefreshFeedsEvent());
+                }
+              }
+            } else if (state is FeedActionError) {
+              if (mounted) {
+                if (state.message.contains('like')) {
+                  setState(() {
+                    _flagLiked = !_flagLiked;
+                    _likes = _flagLiked ? _likes + 1 : _likes - 1;
+                  });
+                }
+                toastification.show(
+                  context: context,
+                  title: Text(state.message),
+                  type: ToastificationType.error,
+                  style: ToastificationStyle.fillColored,
+                  autoCloseDuration: const Duration(seconds: 3),
+                );
+              }
+            }
+          },
+          child: Scaffold(
+            backgroundColor: SearchTheme.surfaceBg,
+            appBar: AppBar(
+              backgroundColor: SearchTheme.cardBg,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                color: SearchTheme.textPrimary,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              title: Text(meta.name ?? '', style: SearchTheme.titleAppBar, overflow: TextOverflow.ellipsis),
+              centerTitle: false,
+            ),
+            body: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: SearchTheme.spacingLg),
+                child: searchContentCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SearchContentProfileRow(meta: meta),
+                      if (meta.mediaFile != null && meta.mediaFile!.isNotEmpty) ...[
+                        const SizedBox(height: SearchTheme.spacingSm),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(SearchTheme.radiusMd),
+                          child: Image.network(
+                            meta.mediaFile!,
+                            width: double.infinity,
+                            fit: BoxFit.contain,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                height: 280,
+                                color: SearchTheme.divider,
+                                child: Center(
+                                  child: SizedBox(
+                                    width: 32,
+                                    height: 32,
+                                    child: CircularProgressIndicator(
+                                      color: SearchTheme.primary,
+                                      value: loadingProgress.expectedTotalBytes != null
+                                          ? loadingProgress.cumulativeBytesLoaded /
+                                              (loadingProgress.expectedTotalBytes ?? 1)
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            errorBuilder: (_, __, ___) => Container(
+                              height: 200,
+                              color: SearchTheme.divider,
+                              child: Icon(Icons.broken_image_outlined, size: 60, color: SearchTheme.textMuted),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: SearchTheme.spacingMd),
+                      SearchContentActionRow(
+                        flagLiked: _flagLiked,
+                        likes: _likes,
+                        reposts: _reposts,
+                        onLike: () {
+                          setState(() {
+                            _flagLiked = !_flagLiked;
+                            _likes = _flagLiked ? _likes + 1 : _likes - 1;
+                          });
+                          providerContext.read<FeedBloc>().add(LikeDislikePostEvent(postId: meta.id));
+                        },
+                        onRepost: () async {
+                          final titleController = TextEditingController(text: '${meta.name ?? 'Repost'} (Repost)');
+                          final captionController = TextEditingController(text: meta.description);
+                          final result = await showDialog<Map<String, String>>(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Repost'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Title')),
+                                  TextField(controller: captionController, decoration: const InputDecoration(labelText: 'Caption')),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(dialogContext, {'title': titleController.text, 'caption': captionController.text}),
+                                  child: const Text('Repost'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (result != null && context.mounted) {
+                            providerContext.read<FeedBloc>().add(
+                              RepostEvent(postId: meta.id, title: result['title']!, caption: result['caption']!),
+                            );
+                          }
+                        },
+                        onShare: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.vertical(top: Radius.circular(SearchTheme.radiusXl)),
+                            ),
+                            builder: (context) => ShareScreen(
+                              mediaFile: meta.mediaFile,
+                              mediaType: meta.mediaType,
+                              title: meta.name,
+                              caption: meta.description,
+                              postId: meta.id,
+                            ),
+                          );
+                        },
+                      ),
+                      if (meta.description != null && meta.description!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: SearchTheme.spacingSm),
+                          child: Text(meta.description!, maxLines: 3, overflow: TextOverflow.ellipsis, style: SearchTheme.subtitle),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: SearchTheme.spacingMd),
+                        child: Text(meta.created ?? '', style: SearchTheme.caption),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

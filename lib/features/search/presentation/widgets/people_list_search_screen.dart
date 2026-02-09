@@ -1,36 +1,112 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:kakan/features/search/domain/entities/search_result.dart';
 import 'package:kakan/features/search/presentation/bloc/combined_search/combined_search_bloc.dart';
 import 'package:kakan/features/search/presentation/bloc/combined_search/combined_search_state.dart';
-import 'package:kakan/features/search/domain/entities/search_result.dart';
+import 'package:kakan/features/search/presentation/theme/search_theme.dart';
 import 'package:kakan/features/followsuggestions/presentation/bloc/suggestion_bloc.dart';
 import 'package:kakan/features/followsuggestions/presentation/bloc/suggestion_event.dart';
 
 class PeopleListSearchScreen extends StatelessWidget {
-  const PeopleListSearchScreen({Key? key}) : super(key: key);
+  const PeopleListSearchScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<CombinedSearchBloc, CombinedSearchState>(
       builder: (context, state) {
         if (state is SearchLoading) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(SearchTheme.spacingXXl),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: SearchTheme.primary,
+                    ),
+                  ),
+                  SizedBox(height: SearchTheme.spacingLg),
+                  Text('Searching…', style: SearchTheme.emptySubtitle),
+                ],
+              ),
+            ),
+          );
         }
         if (state is SearchLoaded) {
           final people = state.people;
           if (people.isEmpty) {
-            return const Center(child: Text('No people found'));
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(SearchTheme.spacingXXl),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.person_search_rounded,
+                      size: 64,
+                      color: SearchTheme.textMuted,
+                    ),
+                    const SizedBox(height: SearchTheme.spacingLg),
+                    Text('No people found', style: SearchTheme.emptyTitle),
+                    const SizedBox(height: SearchTheme.spacingSm),
+                    Text(
+                      'Try a different search term',
+                      style: SearchTheme.emptySubtitle,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SearchTheme.spacingLg,
+              vertical: SearchTheme.spacingSm,
+            ),
             itemCount: people.length,
-            itemBuilder: (ctx, i) => _PersonTile(user: people[i]),
+            separatorBuilder: (_, __) => const SizedBox(height: SearchTheme.spacingSm),
+            itemBuilder: (_, i) => _PersonTile(user: people[i]),
           );
         }
         if (state is SearchError) {
-          return Center(child: Text(state.message));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(SearchTheme.spacingXXl),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline_rounded, size: 48, color: SearchTheme.likeRed),
+                  const SizedBox(height: SearchTheme.spacingLg),
+                  Text(state.message, style: SearchTheme.errorText, textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          );
         }
-        return const Center(child: Text('Type to search'));
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(SearchTheme.spacingXXl),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.search_rounded, size: 64, color: SearchTheme.textMuted),
+                const SizedBox(height: SearchTheme.spacingLg),
+                Text('Type to search', style: SearchTheme.emptyTitle),
+                const SizedBox(height: SearchTheme.spacingSm),
+                Text(
+                  'Find people, videos, and songs',
+                  style: SearchTheme.emptySubtitle,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        );
       },
     );
   }
@@ -38,7 +114,8 @@ class PeopleListSearchScreen extends StatelessWidget {
 
 class _PersonTile extends StatefulWidget {
   final SearchResult user;
-  const _PersonTile({Key? key, required this.user}) : super(key: key);
+
+  const _PersonTile({required this.user});
 
   @override
   State<_PersonTile> createState() => _PersonTileState();
@@ -65,55 +142,80 @@ class _PersonTileState extends State<_PersonTile> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).primaryColor;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          widget.user.profileImage != null
-              ? CircleAvatar(
-                  radius: 20,
-                  backgroundImage: NetworkImage(widget.user.profileImage!),
-                )
-              : const CircleAvatar(radius: 20, child: Icon(Icons.person)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.user.username ?? '',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${widget.user.name} • ${widget.user.followersCount} Followers',
-                  style: const TextStyle(
-                      fontSize: 14, color: Colors.black54, height: 1.2),
-                ),
-              ],
-            ),
-          ),
-          OutlinedButton(
-            onPressed: _toggleFollow,
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: primary, width: 1.5),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              minimumSize: const Size(0, 32),
-            ),
-            child: Text(
-              _followed ? 'Unfollow' : 'Follow',
-              style: TextStyle(
-                color: _followed ? Colors.black54 : primary,
-                fontWeight: FontWeight.w600,
+    final u = widget.user;
+    return Material(
+      color: SearchTheme.cardBg,
+      borderRadius: BorderRadius.circular(SearchTheme.radiusLg),
+      elevation: 0,
+      shadowColor: Colors.black.withValues(alpha: 0.06),
+      child: InkWell(
+        onTap: () {},
+        borderRadius: BorderRadius.circular(SearchTheme.radiusLg),
+        child: Padding(
+          padding: const EdgeInsets.all(SearchTheme.spacingMd),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: SearchTheme.avatarSize / 2,
+                backgroundColor: SearchTheme.divider,
+                backgroundImage: u.profileImage != null && u.profileImage!.isNotEmpty
+                    ? NetworkImage(u.profileImage!)
+                    : null,
+                child: u.profileImage == null || u.profileImage!.isEmpty
+                    ? Icon(Icons.person_rounded, color: SearchTheme.textMuted, size: 28)
+                    : null,
               ),
-            ),
+              const SizedBox(width: SearchTheme.spacingMd),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      u.username ?? 'Unknown',
+                      style: SearchTheme.titleCard,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: SearchTheme.spacingXs),
+                    Text(
+                      '${u.name ?? ''} • ${u.followersCount ?? 0} Followers',
+                      style: SearchTheme.caption.copyWith(color: SearchTheme.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: SearchTheme.spacingSm),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _toggleFollow,
+                  borderRadius: BorderRadius.circular(SearchTheme.radiusFull),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: SearchTheme.spacingLg,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _followed
+                          ? SearchTheme.chipUnselectedBg
+                          : SearchTheme.primary,
+                      borderRadius: BorderRadius.circular(SearchTheme.radiusFull),
+                    ),
+                    child: Text(
+                      _followed ? 'Following' : 'Follow',
+                      style: SearchTheme.labelChip.copyWith(
+                        color: _followed ? SearchTheme.textSecondary : Colors.white,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

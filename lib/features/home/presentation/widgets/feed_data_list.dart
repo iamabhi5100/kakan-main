@@ -617,6 +617,24 @@ class _FeedItemWidgetState extends State<FeedItemWidget>
     _initializeMedia();
   }
 
+  /// Media items to pass to ShareScreen: use full list for carousel, else single item when only mediaFile is set.
+  List<FeedMediaItem>? _shareMediaItemsFor(FeedEntity feed) {
+    if (feed.mediaItems != null && feed.mediaItems!.isNotEmpty) {
+      return feed.mediaItems;
+    }
+    if (feed.mediaFile.isEmpty) return null;
+    const attachable = ['image', 'video', 'audio', 'carousel'];
+    if (attachable.contains(feed.mediaType)) {
+      return [
+        FeedMediaItem(
+          type: feed.mediaType == 'carousel' ? 'carousel' : feed.mediaType,
+          mediaFile: feed.mediaFile,
+        ),
+      ];
+    }
+    return null;
+  }
+
   // -------------------------
   // AUDIO HELPERS / FALLBACKS
   // -------------------------
@@ -1147,7 +1165,9 @@ class _FeedItemWidgetState extends State<FeedItemWidget>
                         mediaFile: widget.feed.mediaFile,
                         mediaType: widget.feed.mediaType,
                         caption: widget.feed.caption,
+                        title: widget.feed.title,
                         postId: widget.feed.id,
+                        mediaItems: _shareMediaItemsFor(widget.feed),
                       ),
                     ),
                   ),

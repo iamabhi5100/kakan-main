@@ -169,7 +169,7 @@ GoRouter createAppRouter({String initialLocation = '/splash'}) => GoRouter(
       builder: (context, state) => const FollowSuggestionsScreen(),
     ),
 
-    // Protected with AuthGate
+    // Protected with AuthGate (double-back-to-exit is handled inside HomeScreen)
     GoRoute(
       path: '/home',
       builder: (context, state) => const AuthGate(child: HomeScreen()),
